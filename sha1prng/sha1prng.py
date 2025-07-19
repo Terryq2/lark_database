@@ -36,7 +36,7 @@ class Decrypter:
         signature = hashlib.sha1(key.encode()).digest()
         signature = hashlib.sha1(signature).digest()
         return signature.hex().upper()[:32]
-    
+
 
 if __name__ == "__main__":
     t = Decrypter("democs")
