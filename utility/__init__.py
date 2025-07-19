@@ -1,0 +1,22 @@
+from pathlib import Path
+from dotenv import load_dotenv
+
+FINANCIAL_DATA_TYPE_MAP = {
+    "C01": "影票订单数据",
+    "C02": "商品订单数据",
+    "C03": "发卡数据",
+    "C04": "卡充值数据",
+    "C05": "卡消费数据",
+    "C06": "券回兑数据",
+    "C07": "商品进销存数据",
+    "C08": "商品出入库数据",
+    "C09": "销售消耗原材料数据",
+    "C10": "销售消耗品项数据",
+    "C11": "会员卡续费数据",
+    "C12": "会员卡退卡数据",
+    "C13": "会员卡激活数据",
+    "C14": "会员卡补卡换卡数"
+}
+
+dotenv_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=dotenv_path)
