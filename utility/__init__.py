@@ -17,6 +17,3 @@ FINANCIAL_DATA_TYPE_MAP = {
     "C13": "会员卡激活数据",
     "C14": "会员卡补卡换卡数"
 }
-
-dotenv_path = Path(__file__).parent.parent / '.env'
-load_dotenv(dotenv_path=dotenv_path)
