@@ -1,6 +1,3 @@
-from pathlib import Path
-from dotenv import load_dotenv
-
 FINANCIAL_DATA_TYPE_MAP = {
     "C01": "影票订单数据",
     "C02": "商品订单数据",
