@@ -4,13 +4,14 @@ Helper functions
 
 import hashlib
 import hmac
-
 import os
-import httpx
 
-from utility import exceptions
-from utility import FINANCIAL_DATA_TYPE_MAP
-from utility import sha1prng
+import httpx
+import polars
+
+from . import exceptions
+from . import FINANCIAL_DATA_TYPE_MAP
+from . import sha1prng
 
 def download_urls(encrypted_urls: list[str],
                   financial_category: str,
@@ -52,7 +53,7 @@ def download_urls(encrypted_urls: list[str],
 
         utf8_content = data_response.content.decode('gbk').encode('utf-8')
 
-        filename = f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/data_part{file_id}.csv"
+        filename = f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/{FINANCIAL_DATA_TYPE_MAP[financial_category]}_part{file_id}.csv"
 
         try:
             with open(filename, "wb") as f:
@@ -135,7 +136,9 @@ def get_signature(api_name: str,
     ).hexdigest().upper()
 
 
-def combine_data_files(file_paths: list[str], financial_category: str):
+def combine_data_files(file_paths: list[str],
+                       financial_category: str,
+                       remove_files_after_finish: bool):
     """
     将多个财务数据 CSV 文件合并为一个输出文件，跳过注释行和重复的表头。
     
@@ -145,6 +148,7 @@ def combine_data_files(file_paths: list[str], financial_category: str):
     参数:
         file_paths (list[str]): 输入 CSV 文件路径列表。
         financial_category (str): 财务数据类型编码，需存在于 `FINANCIAL_DATA_TYPE_MAP` 中。
+        remove_files_after_finish (bool): 如果为真则再合并结束后，删除所有输入数据
 
     异常:
         ValueError: 如果财务类型未知，或第一个文件格式无效。
@@ -173,9 +177,71 @@ def combine_data_files(file_paths: list[str], financial_category: str):
         header = first_lines[1]
         out_file.write(header.encode("utf-8") + b"\n")
 
-        for path in file_paths[1:]:
+        for path in file_paths:
             lines = get_filtered_lines(path)
             for line in lines[2:]:  # Skip header lines
                 out_file.write(line.encode("utf-8") + b"\n")
 
+        if remove_files_after_finish:
+            for path in file_paths:
+                os.remove(path)
+    
+    return output_path
+    
 
+def read_csv(path: str):
+    """
+    读取汇总后的 CSV 文件并返回一个用于向飞书POST数据的结构。
+
+    例如：
+    {
+        "records": [
+            {
+                "fields": {"充值/续费日期":"2025-06-03 15:22:46","充值/续费影院名称":"联调测试影院1","充值/续费影院编码":"99990007","充值/续费影院所属区域":"青龙","订单号":"250603001002X900073171","卡号":"20004998868X"},
+                "fields": {"充值/续费日期":"2025-06-03 15:22:46","充值/续费影院名称":"联调测试影院1","充值/续费影院编码":"99990007","充值/续费影院所属区域":"青龙","订单号":"250603001002X900073171","卡号":"20004998868X"}
+            }
+        ]
+    }
+
+    参数:
+        path (str): CSV 文件的路径。
+
+    返回:
+        dict: 包含 'records' 键的字典，嵌套字段为 CSV 每行数据的字段字典，键和值均为字符串。
+
+    """
+    max_rows_per_post = 1000
+    df = polars.read_csv(path, truncate_ragged_lines=True, infer_schema=False)
+    data_dict = df.to_dicts()
+    total_rows = len(data_dict)
+    
+    current_entry_ptr = 0
+    list_of_records = []
+    while current_entry_ptr < total_rows:
+        if total_rows - current_entry_ptr > max_rows_per_post:
+            chunk_size = max_rows_per_post
+        else:
+            chunk_size = total_rows - current_entry_ptr
+
+
+        records = [
+            {"fields": data_dict[row]} for row in range(current_entry_ptr, current_entry_ptr + chunk_size)
+        ]
+        list_of_records.append(records)
+
+        current_entry_ptr += max_rows_per_post
+            
+    return list_of_records
+
+
+def order_by_time(path: str):
+    df = polars.read_csv(path, truncate_ragged_lines=True, infer_schema=False)
+    df = df.with_columns([
+        polars.col(df.columns[0]).str.strptime(polars.Datetime, "%Y-%m-%d %H:%M:%S", strict=False)
+    ])
+    df = df.sort(df.columns[0], descending = False)
+    df = df.with_columns([
+        polars.col(df.columns[0]).dt.strftime("%Y-%m-%d %H:%M:%S")
+    ])
+    os.remove(path)
+    df.write_csv(path, quote_style="always")
