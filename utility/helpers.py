@@ -191,24 +191,45 @@ def combine_data_files(file_paths: list[str],
 
 def read_csv(path: str):
     """
-    读取汇总后的 CSV 文件并返回一个用于向飞书POST数据的结构。
+    读取汇总后的 CSV 文件并返回一个用于向飞书 POST 数据的结构，以分块方式处理。
 
+    将 CSV 文件数据转换为包含多个记录块的列表，每个块包含最多 1000 条记录。
+    每条记录包含一个 'fields' 键，其值为对应 CSV 行的字段字典，键和值均为字符串。
     例如：
-    {
-        "records": [
+    [
+        [
             {
-                "fields": {"充值/续费日期":"2025-06-03 15:22:46","充值/续费影院名称":"联调测试影院1","充值/续费影院编码":"99990007","充值/续费影院所属区域":"青龙","订单号":"250603001002X900073171","卡号":"20004998868X"},
-                "fields": {"充值/续费日期":"2025-06-03 15:22:46","充值/续费影院名称":"联调测试影院1","充值/续费影院编码":"99990007","充值/续费影院所属区域":"青龙","订单号":"250603001002X900073171","卡号":"20004998868X"}
-            }
-        ]
-    }
-
+                "fields": {
+                    "充值/续费日期": "2025-06-03 15:22:46",
+                    "充值/续费影院名称": "联调测试影院1",
+                    "充值/续费影院编码": "99990007",
+                    "充值/续费影院所属区域": "青龙",
+                    "订单号": "250603001002X900073171",
+                    "卡号": "20004998868X"
+                }
+            },
+            ...
+        ],
+        ...
+    ]
     参数:
         path (str): CSV 文件的路径。
 
     返回:
-        dict: 包含 'records' 键的字典，嵌套字段为 CSV 每行数据的字段字典，键和值均为字符串。
+        list: 包含多个记录块的列表，每个块是一个字典列表，字典包含 'fields' 键，对应 CSV 行的字段字典。
 
+    异常:
+        polars.exceptions.ComputeError: 如果 CSV 文件格式错误或无法读取。
+        FileNotFoundError: 如果指定的路径不存在。
+
+    示例:
+        >>> data = read_csv("data.csv")
+        >>> print(data[0][0]["fields"])
+        {'充值/续费日期': '2025-06-03 15:22:46', '充值/续费影院名称': '联调测试影院1', ...}
+
+    注意:
+        - 每块记录最多包含 1000 条数据，以适应飞书 API 的限制。
+        - 使用 polars 库读取 CSV 文件，确保 truncate_ragged_lines=True 和 infer_schema=False 以处理不规则数据。
     """
     max_rows_per_post = 1000
     df = polars.read_csv(path, truncate_ragged_lines=True, infer_schema=False)
@@ -222,19 +243,44 @@ def read_csv(path: str):
             chunk_size = max_rows_per_post
         else:
             chunk_size = total_rows - current_entry_ptr
-
-
         records = [
             {"fields": data_dict[row]} for row in range(current_entry_ptr, current_entry_ptr + chunk_size)
         ]
         list_of_records.append(records)
-
         current_entry_ptr += max_rows_per_post
             
     return list_of_records
 
 
 def order_by_time(path: str):
+    """
+    读取 CSV 文件，按时间列排序并覆盖原文件。
+
+    该函数读取指定路径的 CSV 文件，将第一列解析为日期时间格式，按升序排序后，
+    将日期时间格式转换回字符串，并覆盖原文件保存排序后的数据。
+
+    参数:
+        path (str): CSV 文件的路径。
+
+    返回:
+        None
+
+    异常:
+        polars.exceptions.ComputeError: 如果 CSV 文件格式错误或无法读取。
+        FileNotFoundError: 如果指定的路径不存在。
+        ValueError: 如果第一列的日期时间格式解析失败。
+        OSError: 如果文件删除或写入操作失败。
+
+    示例:
+        >>> order_by_time("data.csv")
+        # 假设 data.csv 的第一列为日期时间格式，文件将被排序并覆盖保存
+
+    注意:
+        - 第一列必须包含格式为 "%Y-%m-%d %H:%M:%S" 的日期时间字符串。
+        - 使用 strict=False 处理非严格的日期时间解析，可能导致无效数据被解析为 null。
+        - 原文件将被删除并覆盖，建议在操作前备份文件。
+        - 使用 polars 库读取和处理 CSV 文件，确保 truncate_ragged_lines=True 和 infer_schema=False 以处理不规则数据。
+    """
     df = polars.read_csv(path, truncate_ragged_lines=True, infer_schema=False)
     df = df.with_columns([
         polars.col(df.columns[0]).str.strptime(polars.Datetime, "%Y-%m-%d %H:%M:%S", strict=False)
