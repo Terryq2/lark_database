@@ -6,6 +6,7 @@ from datetime import datetime
 import hashlib
 import hmac
 import os
+import time
 
 import httpx
 import polars
@@ -309,3 +310,11 @@ def get_past_days_this_month():
     month = today.month
     day = today.day
     return [f"{year}-{month:02d}-{d:02d}" for d in range(1, day)]
+
+
+def get_timestamp() -> int:
+    """返回当前毫秒级 Unix 时间戳。
+    Returns:
+        int: 当前的 Unix 时间戳（毫秒级）。
+    """
+    return int(time.time() * 1000)
