@@ -2,9 +2,11 @@
 Helper functions
 """
 
+from datetime import datetime
 import hashlib
 import hmac
 import os
+import time
 
 import httpx
 import polars
@@ -252,7 +254,7 @@ def read_csv(path: str):
     return list_of_records
 
 
-def order_by_time(path: str):
+def order_by_time(path: str, timestamp_col: str = 0):
     """
     读取 CSV 文件，按时间列排序并覆盖原文件。
 
@@ -281,13 +283,38 @@ def order_by_time(path: str):
         - 原文件将被删除并覆盖，建议在操作前备份文件。
         - 使用 polars 库读取和处理 CSV 文件，确保 truncate_ragged_lines=True 和 infer_schema=False 以处理不规则数据。
     """
+
     df = polars.read_csv(path, truncate_ragged_lines=True, infer_schema=False)
     df = df.with_columns([
-        polars.col(df.columns[0]).str.strptime(polars.Datetime, "%Y-%m-%d %H:%M:%S", strict=False)
+        polars.col(df.columns[timestamp_col]).str.strptime(polars.Datetime, "%Y-%m-%d %H:%M:%S", strict=False)
     ])
-    df = df.sort(df.columns[0], descending = False)
+    df = df.sort(df.columns[timestamp_col], descending = False)
     df = df.with_columns([
-        polars.col(df.columns[0]).dt.strftime("%Y-%m-%d %H:%M:%S")
+        polars.col(df.columns[timestamp_col]).dt.strftime("%Y-%m-%d %H:%M:%S")
     ])
     os.remove(path)
     df.write_csv(path, quote_style="always")
+
+
+def get_past_days_this_month():
+    """
+    返回当月中已经过去的所有日期（不包括今天），格式为 'YYYY-MM-DD' 的字符串列表。
+
+    例如，如果今天是 2025 年 7 月 23 日，函数将返回从 '2025-07-01' 到 '2025-07-22' 的所有日期。
+
+    返回值：
+        list[str]: 当前月份中从1号到昨天的所有日期字符串列表。
+    """
+    today = datetime.now()
+    year = today.year
+    month = today.month
+    day = today.day
+    return [f"{year}-{month:02d}-{d:02d}" for d in range(1, day)]
+
+
+def get_timestamp() -> int:
+    """返回当前毫秒级 Unix 时间戳。
+    Returns:
+        int: 当前的 Unix 时间戳（毫秒级）。
+    """
+    return int(time.time() * 1000)
