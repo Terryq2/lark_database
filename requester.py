@@ -3,6 +3,7 @@ import os
 import time
 import dotenv
 
+
 import httpx
 from utility import exceptions
 from utility import FINANCIAL_DATA_TYPE_MAP
@@ -18,6 +19,31 @@ class YKYRequester:
         financial_categories (list): 可用的财政数据类型代码列表（例如 'C01' 到 'C23'）。
     """
     def __init__(self):
+        self.column_names = {
+            #This gives the names of the columns for (key)
+            "商品订单数据": ["销售时间","影院名称","售订单号","退订单号","销售类型","销售渠道","销售员工号","销售员","大类","卖品名称",
+                    "套餐别名","卖品编码","销售数量","单位","原价","实际售价","套餐内容","支付工具","支付金额","优惠信息",
+                    "优惠金额","活动ID","活动名称","补贴方","销售工作站","销售地点","库存扣减地点","取货时间","取货员工号",
+                    "取货员","取货工作站","外部流水号","第三方订单号","券模板名称","退货渠道编码","退货渠道","影院国家编码",
+                    "影院所属区域","会员卡号","优惠券码","大类编码","套餐编码","支付工具编码","支付序号","销售渠道编码",
+                    "券模版编码","影城所属区域编码","会员ID","手机号","商户订单号","第三方支付流水号","第三方优惠信息",
+                    "第三方优惠金额","活动类型","发卡影城编码","发卡影城名称","发券影城编码","发券影城名称","一级分类","二级分类","三级分类"],
+
+            "卡消费数据": ["消费时间","消费影院名称","消费影院编码","消费影院所属区域","订单号","卡号","卡类型","卡类型编码","卡政策","卡政策编码",
+                      "商品类型","商品名称","票数","影厅","放映时间","商品价格","卡消费金额","消费渠道",
+                      "操作员","操作员工号","发卡影院名称","发卡影院编码","发卡影院所属区域","发卡影城所属区域编码",
+                      "消费影城所属区域编码","会员ID","退票手续费金额"],
+
+            "卡充值数据": ["充值/续费日期","充值/续费影院名称","充值/续费影院编码","充值/续费影院所属区域",
+                      "订单号","卡号","卡类型编码","卡类型","卡政策编码","卡政策","充值金额","销售方式","发卡面值","支付后卡余额","支付工具编码",
+                      "支付工具","支付渠道","支付渠道编码","操作员","操作员编码","发卡影院名称","发卡影院编码","发卡影城所属区域","类型",
+                      "发卡影城所属区域编码","充值/续费影城所属区域编码","会员ID","商户订单号","第三方支付流水号","流向客户名称","流向客户外部编码"]
+        }
+        self.timestamp_col = {
+            #This indicates the index of the column which stores the timestamp. 
+            # The timestamp column is not always the first column.
+            "销售消耗品项数据": 2
+        }
         self.keys: dict[str, str] = dotenv.dotenv_values()
         self.base_url: str = "https://gw.open.yuekeyun.com/openapi/param2/1/alibaba.dme.lark"
 
@@ -69,14 +95,44 @@ class YKYRequester:
 
             response = query_data(api_name, query_parameters, self.keys["APP_KEY"])
 
-            print(response.json())
+            # print(response.json())
             download_url_list = response.json()['data']['bizData']['downloadUrlList']
 
             decrypter = sha1prng.Decrypter(self.keys["LEASE_CODE"])
             file_name_stack = download_urls(download_url_list, financial_category, decrypter)
-            output_csv = combine_data_files(file_name_stack, financial_category, False)
-            order_by_time(output_csv)
+            output_csv = combine_data_files(file_name_stack, financial_category, True)
+            if financial_category in self.timestamp_col:
+                order_by_time(output_csv, self.timestamp_col[financial_category])
+            else:
+                order_by_time(output_csv)
 
+    def create_new_table(self, app_token: str, file_name: str, financial_category: str):
+        """
+        在由app_token指定的位置生成一个名字为file_name的表格。
+        表格字段由financial_category决定
+        """
+        url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables"
+
+
+        headers = {
+            "Authorization": f"Bearer {self.get_tenant_access_token_from_feishu()}",
+            "Content-Type": "application/json"
+        }
+
+        def format_headers(headers: list[str]):
+            return [{"field_name": header, "type": 1} for header in headers]
+        
+        column_names = self.column_names[FINANCIAL_DATA_TYPE_MAP[financial_category]]
+        request_body = {
+            "table": {
+                "name": file_name,
+                "fields": format_headers(column_names)
+            }
+        }
+        with httpx.Client() as client:
+            response = client.post(url, headers=headers, json=request_body)
+            response.raise_for_status()
+            return response.json()
 
     def get_tenant_access_token_from_feishu(self):
         """
@@ -118,13 +174,13 @@ class YKYRequester:
             "app_secret": self.keys["FEISHU_APP_SECRET"]
         }
 
-
         with httpx.Client() as client:
             response = client.post(url, headers=headers, json=request_body)
-            print(response.json())
+            response.raise_for_status()
             return response.json()['tenant_access_token']
+        
 
-    def get_cloud_file_token(self, node_token: str):
+    def get_wiki_app_token(self, node_token: str):
         """
         获取飞书云文档(wiki)的 obj_token。
 
@@ -156,7 +212,7 @@ class YKYRequester:
 
         with httpx.Client() as client:
             response = client.get(url, headers=headers, params=request_body)
-            print(response.content)
+            response.raise_for_status()
             return response.json()['data']['node']['obj_token']
 
     def post_csv_data_to_feishu(self, path: str, app_token: str, table_id: str):
@@ -169,7 +225,7 @@ class YKYRequester:
         返回:
             dict: 飞书 API 的响应内容。
         """
-        
+
         url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records/batch_create"
 
         headers = {
@@ -178,15 +234,17 @@ class YKYRequester:
         }
 
         request_bodies = read_csv(path)
-        
+
+        print("Uploading: ", path)
         for request_body in request_bodies:
             with httpx.Client() as client:
-                response = client.post(url, headers=headers, json={"records": request_body})
-                print(response.content)
-                
+                response = client.post(url, headers=headers, json={"records": request_body}, timeout=30.0)
+                response.raise_for_status()
+                print("......")
+                # print(response.content)
+        print("Done")
         os.remove(path)
-        return
-        
-        
-        
-            
+
+
+
+

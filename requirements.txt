@@ -1,0 +1,5 @@
+polars
+httpx
+datetime
+dotenv
+Crypto
