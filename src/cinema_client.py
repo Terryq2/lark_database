@@ -1,6 +1,5 @@
 """This is a class that helps fetching data from the yuekeyun website"""
 import logging
-from typing import Tuple, Dict, Any, List
 
 from utility import exceptions
 from utility import FINANCIAL_DATA_TYPE_MAP
@@ -13,7 +12,7 @@ from utility.helpers import (
     get_timestamp
 )
 from utility import sha1prng
-import config
+import src.config as config
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +77,7 @@ class YKYRequester:
 
         logger.debug(f"Input validation passed for category: {financial_category}, timespan: {timespan}")
 
-    def _build_query_parameters(self, financial_category: str, timespan: str, search_date: str) -> Dict[str, str]:
+    def _build_query_parameters(self, financial_category: str, timespan: str, search_date: str) -> dict[str, str]:
         """构建API查询参数。
 
         Args:
@@ -102,7 +101,7 @@ class YKYRequester:
         logger.debug(f"Built query parameters for {financial_category} on {search_date}")
         return query_parameters
 
-    def _generate_signature(self, query_parameters: Dict[str, str]) -> str:
+    def _generate_signature(self, query_parameters: dict[str, str]) -> str:
         """生成API请求签名。
 
         Args:
@@ -124,7 +123,7 @@ class YKYRequester:
             logger.error(f"Failed to generate signature: {e}")
             raise
 
-    def _fetch_download_urls(self, query_parameters: Dict[str, str]) -> List[str]:
+    def _fetch_download_urls(self, query_parameters: dict[str, str]) -> dict[str]:
         """获取数据下载URL列表。
 
         Args:
@@ -164,7 +163,7 @@ class YKYRequester:
 
     def _process_downloaded_data(
         self, 
-        download_url_list: List[str], 
+        download_url_list: list[str], 
         financial_category: str, 
         search_date: str
     ) -> str:
@@ -214,7 +213,7 @@ class YKYRequester:
             self._cleanup_on_error(file_name_stack if 'file_name_stack' in locals() else [])
             raise
 
-    def _cleanup_on_error(self, file_list: List[str]) -> None:
+    def _cleanup_on_error(self, file_list: list[str]) -> None:
         """错误时清理已下载的文件。
 
         Args:
@@ -234,7 +233,7 @@ class YKYRequester:
             except Exception as cleanup_error:
                 logger.warning(f"Failed to cleanup file {file_path}: {cleanup_error}")
 
-    def get_financial_data(self, entries: Tuple[str, str, str]) -> str:
+    def get_financial_data(self, entries: tuple[str, str, str]) -> str:
         """用于获取财政数据。
 
         从悦刻云API获取指定类型和日期的财务数据，包括下载、解密、合并和排序等完整流程。
@@ -298,4 +297,4 @@ class YKYRequester:
             raise
         except Exception as e:
             logger.error(f"Financial data retrieval failed: {e}")
-            raise Exception(f"Failed to get financial data for {financial_category} on {search_date}: {e}")
+            raise Exception(f"Failed to get financial data for {financial_category} on {search_date}: {e}") from e

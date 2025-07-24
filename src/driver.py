@@ -3,9 +3,9 @@ from typing import Optional
 import logging
 from pathlib import Path
 
-from config import FinancialQueries, ConfigManager
-from fetcher import YKYRequester
-from feishu_client import FeishuClient
+from src.config import FinancialQueries, ConfigManager
+from src.cinema_client import YKYRequester
+from src.feishu_client import FeishuClient
 from utility.helpers import merge_csv_files, FINANCIAL_DATA_TYPE_MAP
 
 logger = logging.getLogger(__name__)
@@ -134,9 +134,9 @@ class DataSyncClient:
             # Note: Using first query's category for upload
             first_query_category = query_tuples[0][0] if query_tuples else queries.category
             self.lark_client.post_csv_data_to_feishu(
-                str(output_path), 
-                wiki_obj_token, 
-                table_name, 
+                str(output_path),
+                wiki_obj_token,
+                table_name,
                 first_query_category
             )
             
@@ -147,9 +147,9 @@ class DataSyncClient:
             raise
 
     def sync_current_year_data(
-        self, 
-        financial_category: str, 
-        table_name: str, 
+        self,
+        financial_category: str,
+        table_name: str,
         wiki_obj_token: Optional[str] = None
     ) -> None:
         """同步当前年度的财务数据。
