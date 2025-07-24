@@ -17,7 +17,7 @@ from . import sha1prng
 
 def download_urls(encrypted_urls: list[str],
                   financial_category: str,
-                  decrypter: sha1prng.Decrypter):
+                  decrypter: sha1prng.Decrypter, search_date: str):
     """
     解密并下载一组加密的 URL 数据。
 
@@ -55,7 +55,7 @@ def download_urls(encrypted_urls: list[str],
 
         utf8_content = data_response.content.decode('gbk').encode('utf-8')
 
-        filename = f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/{FINANCIAL_DATA_TYPE_MAP[financial_category]}_part{file_id}.csv"
+        filename = f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/{FINANCIAL_DATA_TYPE_MAP[financial_category]}_({search_date})_part{file_id}.csv"
 
         try:
             with open(filename, "wb") as f:
@@ -64,8 +64,6 @@ def download_urls(encrypted_urls: list[str],
         except OSError:
             clear_files(file_path_stack)
             raise exceptions.DataFetchException() from OSError
-
-        print(f"Downloaded: {filename}")
         file_id += 1
     return file_path_stack
 
@@ -104,7 +102,7 @@ def query_data(api_name: str, query_parameters: dict[str, str], app_key: str) ->
     base_url: str = "https://gw.open.yuekeyun.com/openapi/param2/1/alibaba.dme.lark"
     with httpx.Client() as client:
         response = client.get(f"{base_url}/{api_name}/{app_key}?",
-                            params=query_parameters)
+                            params=query_parameters, timeout=30.0)
     return response
 
 def get_signature(api_name: str,
@@ -140,6 +138,7 @@ def get_signature(api_name: str,
 
 def combine_data_files(file_paths: list[str],
                        financial_category: str,
+                       search_date: str, 
                        remove_files_after_finish: bool):
     """
     将多个财务数据 CSV 文件合并为一个输出文件，跳过注释行和重复的表头。
@@ -163,7 +162,7 @@ def combine_data_files(file_paths: list[str],
     if not file_paths:
         return
 
-    output_path = f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/{FINANCIAL_DATA_TYPE_MAP[financial_category]}.csv"
+    output_path = f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/{FINANCIAL_DATA_TYPE_MAP[financial_category]}_({search_date}).csv"
 
     def get_filtered_lines(path):
         with open(path, "r", encoding="utf-8") as f:
@@ -254,6 +253,17 @@ def read_csv(path: str):
     return list_of_records
 
 
+def merge_csv_files(folder_path: str) -> polars.DataFrame:
+    dfs = []
+    for filename in os.listdir(folder_path):
+        if filename.endswith(".csv"):
+            filepath = os.path.join(folder_path, filename)
+            df = polars.read_csv(filepath, truncate_ragged_lines=True, infer_schema=False)
+            dfs.append(df)
+    for filename in os.listdir(folder_path):
+        os.remove(os.path.join(folder_path, filename))
+    return polars.concat(dfs, how="vertical")
+
 def order_by_time(path: str, timestamp_col: str = 0):
     """
     读取 CSV 文件，按时间列排序并覆盖原文件。
@@ -318,3 +328,9 @@ def get_timestamp() -> int:
         int: 当前的 Unix 时间戳（毫秒级）。
     """
     return int(time.time() * 1000)
+
+def find_matching_table(json_data, table_name):
+    # Search for the matching table
+    for table in json_data.get("data", {}).get("items", []):
+        if table.get("name") == table_name:
+            return table.get("table_id")
