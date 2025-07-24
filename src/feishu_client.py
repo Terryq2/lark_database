@@ -4,9 +4,8 @@ from typing import Optional, Dict, Any, List
 import httpx
 from tqdm import tqdm
 
-from utility import FINANCIAL_DATA_TYPE_MAP
 from utility.helpers import read_csv, find_matching_table
-import config
+import src.config as config
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +140,7 @@ class FeishuClient:
 
             # 上传数据
             print("Uploading: ", path)
-            for i, request_body in enumerate(tqdm(request_bodies, ncols=50, unit='chunk')):
+            for i, request_body in enumerate(tqdm(request_bodies, ncols=70, unit='chunk')):
                 try:
                     response = self._make_request(
                         "POST", 

@@ -1,7 +1,6 @@
 """"
 Helper functions
 """
-
 from datetime import datetime
 import hashlib
 import hmac
@@ -14,6 +13,7 @@ import polars
 from . import exceptions
 from . import FINANCIAL_DATA_TYPE_MAP
 from . import sha1prng
+from tqdm import tqdm
 
 def download_urls(encrypted_urls: list[str],
                   financial_category: str,
@@ -46,7 +46,7 @@ def download_urls(encrypted_urls: list[str],
     file_id = 0
     file_path_stack: list[str] = []
     os.makedirs(f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}", exist_ok = True)
-    for secret_url in encrypted_urls:
+    for secret_url in tqdm(encrypted_urls, ncols=70, unit="url"):
         try:
             data_response = httpx.get(decrypter.decode(secret_url))
         except httpx.HTTPError:
