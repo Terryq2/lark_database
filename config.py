@@ -1,6 +1,10 @@
+import json
+from datetime import datetime
+import regex as re
+
 from dataclasses import dataclass
 import dotenv
-import json
+
 
 @dataclass
 class Config:
@@ -24,6 +28,7 @@ class Config:
     CHANNEL_CODE: str
     FEISHU_APP_KEY: str
     FEISHU_APP_SECRET: str
+    WIKI_APP_TOKEN: str
 
 class ConfigManager:
     """管理从环境文件加载的配置信息。
@@ -65,7 +70,7 @@ class ConfigManager:
         keys = dotenv.dotenv_values(env_file)
         required_keys = [
             "APP_KEY", "SECRET_KEY", "LEASE_CODE", "CINEMA_LINK_ID",
-            "CHANNEL_CODE", "FEISHU_APP_KEY", "FEISHU_APP_SECRET"
+            "CHANNEL_CODE", "FEISHU_APP_KEY", "FEISHU_APP_SECRET", "WIKI_APP_TOKEN"
         ]
         for key in required_keys:
             if key not in keys:
@@ -79,7 +84,8 @@ class ConfigManager:
             CINEMA_LINK_ID=keys["CINEMA_LINK_ID"],
             CHANNEL_CODE=keys["CHANNEL_CODE"],
             FEISHU_APP_KEY=keys["FEISHU_APP_KEY"],
-            FEISHU_APP_SECRET=keys["FEISHU_APP_SECRET"]
+            FEISHU_APP_SECRET=keys["FEISHU_APP_SECRET"],
+            WIKI_APP_TOKEN=keys["WIKI_APP_TOKEN"]
         )
     
     def get(self, key: str) -> str:
@@ -101,3 +107,45 @@ class ConfigManager:
 
     def get_timestamp_column(self, category: str) -> int:
         return self.schemas[category].get("timestamp_column", 0)
+
+class FinancialQueries:
+    def __init__(self, financial_category: str, time_range: str, query_date: str):
+        
+        self.category = financial_category
+        self.time_spans = [time_range]
+        self.querie_dates = [query_date]
+        self.size = 1
+
+
+    def add_new_query(self, time_span: str, query_date: str):
+        assert(time_span in ("month", "day"))
+        assert(self.is_real_and_valid_date(time_span, query_date))
+
+        self.time_spans.append(time_span)
+        self.querie_dates.append(query_date)
+        self.size += 1
+            
+    def is_real_and_valid_date(self, time_span: str, input_date: str):
+        try:
+            if time_span == "month":
+                datetime.strptime(input_date, "%Y-%m")
+            else:
+                datetime.strptime(input_date, "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
+
+
+    def to_tuple(self) -> list[tuple[str, str, str]]:
+        """将查询条目转换为元组格式。
+
+        返回:
+            Tuple[str, str, str]: 包含(data_type, time_range, query_date)的元组。
+
+        示例:
+            >>> query = FinancialQuery('C01', 'day', '2023-01-01')
+            >>> query.to_tuple()
+            ('C01', 'day', '2023-01-01')
+        """
+        return [(self.category, self.time_spans[i], self.querie_dates[i]) for i in range(self.size)]
+        
