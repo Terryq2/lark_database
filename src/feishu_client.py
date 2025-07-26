@@ -522,4 +522,109 @@ class FeishuClient:
             raise
 
     
-        
+    def get_table_records_id_at_head_date(
+        self,
+        table_name: str,
+        time_stamp_column_name: str = None,
+        wiki_obj_token: Optional[str] = None
+    ) -> list[str]:
+        """
+        获取飞书表格中最早日期(表头日期)对应的所有记录ID。
+
+        假设表格记录按时间戳升序排序(最早的在最前),一旦出现比首个记录日期大的记录,即可停止遍历。
+
+        Args:
+            table_name (str): 飞书多维表的名称。
+            time_stamp_column_name (str, optional): 时间戳列的名称。
+            wiki_obj_token (Optional[str], optional): Wiki 表对象 token。
+
+        Returns:
+            list[str]: 所有记录时间戳等于表头最早日期的记录ID列表。
+        """
+        try:
+            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+            list_of_id = []
+
+            response = self.get_table_records(table_name, wiki_obj_token=wiki_obj_token)
+            
+            # Handle empty response
+            if not response.get('data', {}).get('items'):
+                logger.info(f"No records found in table '{table_name}'")
+                return []
+
+            items = response['data']['items']
+            
+            # Get the first record's date to establish the head date
+            first_record = items[0]
+            timestamp_field = first_record.get("fields", {}).get(time_stamp_column_name)
+                
+            try:
+                first_date = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S").date()
+            except ValueError as ve:
+                logger.error(f"Invalid datetime format in first record: {ve}")
+                return []
+
+            logger.info(f"Head date determined as: {first_date}")
+            
+            # Process first page
+            for field in items:
+                timestamp_field = field['fields'][time_stamp_column_name]
+                if not timestamp_field or not timestamp_field[0].get('text'):
+                    logger.warning(f"Missing timestamp field in record {field.get('record_id', 'unknown')}")
+                    continue
+                    
+                try:
+                    dt_obj = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S")
+                    record_date = dt_obj.date()
+                except ValueError as ve:
+                    logger.warning(f"Invalid datetime format in record {field.get('record_id', 'unknown')}: {ve}")
+                    continue
+
+                # If we encounter a date different from the first date, stop processing
+                if record_date != first_date:
+                    logger.info(f"Encountered different date {record_date}, stopping pagination")
+                    return list_of_id
+
+                list_of_id.append(field['record_id'])
+
+            # Continue with subsequent pages if needed
+            already_read = len(items)
+            total_records = response['data']['total']
+            
+            while already_read < total_records:
+                page_token = response['data']['page_token']
+            
+                response = self.get_table_records(
+                    table_name, 
+                    page_token=page_token, 
+                    wiki_obj_token=wiki_obj_token
+                )
+                    
+                items = response['data']['items']
+                already_read += len(items)
+                
+                for field in items:
+                    timestamp_field = field['fields'][time_stamp_column_name]
+                    if not timestamp_field or not timestamp_field[0].get('text'):
+                        logger.warning(f"Missing timestamp field in record {field.get('record_id', 'unknown')}")
+                        continue
+                        
+                    try:
+                        dt_obj = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S")
+                        record_date = dt_obj.date()
+                    except ValueError as ve:
+                        logger.warning(f"Invalid datetime format in record {field.get('record_id', 'unknown')}: {ve}")
+                        continue
+                    
+                    if record_date != first_date:
+                        logger.info(f"Encountered different date {record_date}, stopping pagination")
+                        return list_of_id
+
+                    list_of_id.append(field['record_id'])
+
+            logger.info(f"Fetched {len(list_of_id)} record(s) at head date {first_date}")
+            return list_of_id
+
+        except Exception as e:
+            logger.error(f"Failed to fetch head-date records from '{table_name}': {e}")
+            raise

@@ -1,3 +1,12 @@
+"""
+数据同步模块：协调Yuekeyun API与飞书平台的数据获取与上传。
+
+本模块定义了DataSyncClient类，用于驱动财务数据的下载与上传流程，支持从悦刻云平台获取数据，并将其同步至飞书指定表格。该模块也包括数据合并、清洗及异常处理逻辑，适用于日常自动化同步任务。
+
+Classes:
+    DataSyncClient: 核心类，负责调度配置、API客户端及数据上传逻辑。
+"""
+
 from datetime import datetime, timedelta, date
 from typing import Optional
 import logging
@@ -81,7 +90,7 @@ class DataSyncClient:
             logger.error(f"Failed to download financial data: {e}")
             raise
 
-    def _upload_data(
+    def upload_data(
         self, 
         queries: FinancialQueries, 
         table_name: str, 
@@ -155,6 +164,8 @@ class DataSyncClient:
     ) -> None:
         """同步当前年度的财务数据。
 
+        该方法将从年初至今的每月数据及本月每日数据合并后上传至飞书指定表格。
+
         Args:
             financial_category (str): 财务数据类别。
             table_name (str): 飞书目标数据表名称。
@@ -162,6 +173,7 @@ class DataSyncClient:
 
         Raises:
             ValueError: 当参数无效时抛出。
+            Exception: 任意步骤失败时抛出。
         """
         if not financial_category.strip():
             raise ValueError("Financial category cannot be empty")
@@ -194,7 +206,7 @@ class DataSyncClient:
                 date_str = f"{current_time.year}-{current_time.month:02d}-{day:02d}"
                 queries.add_new_query("day", date_str)
 
-            self._upload_data(queries, table_name, wiki_obj_token)
+            self.upload_data(queries, table_name, wiki_obj_token)
             
         except Exception as e:
             logger.error(f"Failed to sync current year data: {e}")
@@ -209,6 +221,8 @@ class DataSyncClient:
     ) -> None:
         """同步最近指定天数的财务数据。
 
+        从当前日期开始回溯指定天数（默认14天），逐日获取数据并上传飞书。
+
         Args:
             financial_category (str): 财务数据类别。
             table_name (str): 飞书目标数据表名称。
@@ -216,7 +230,9 @@ class DataSyncClient:
             wiki_obj_token (Optional[str]): 飞书wiki对象令牌，如果为None则自动获取。
 
         Raises:
-            ValueError: 当参数无效时抛出。
+            ValueError: 当输入参数无效时抛出。
+            Exception: 任意步骤失败时抛出。
+        
         """
         if not financial_category.strip():
             raise ValueError("Financial category cannot be empty")
@@ -247,7 +263,7 @@ class DataSyncClient:
                 date = (current_time - timedelta(days=i)).strftime("%Y-%m-%d")
                 queries.add_new_query('day', date)
 
-            self._upload_data(queries, table_name, wiki_obj_token)
+            self.upload_data(queries, table_name, wiki_obj_token)
             
         except Exception as e:
             logger.error(f"Failed to upload most recent data: {e}")
@@ -261,6 +277,20 @@ class DataSyncClient:
             looking_back: int = 14,
             wiki_obj_token: Optional[str] = None
     ) -> None:
+        """同步最近N天的财务数据，并清除飞书表中已存在的相应记录。
+
+        该方法先删除飞书表格中早于指定日期（例如14天前）的旧数据，再上传今天的数据。
+
+        Args:
+            financial_category (str): 财务数据类别。
+            table_name (str): 飞书目标数据表名称。
+            looking_back (int): 回溯天数（用于删除早于该天的数据），默认为14。
+            wiki_obj_token (Optional[str]): 飞书wiki对象令牌，如果为None则自动获取。
+
+        Raises:
+            ValueError: 当输入参数无效时抛出。
+            Exception: 任意步骤失败时抛出。
+        """
         if not financial_category.strip():
             raise ValueError("Financial category cannot be empty")
         if not table_name.strip():
@@ -278,11 +308,11 @@ class DataSyncClient:
             
             day_str = (date.today() - timedelta(days=looking_back)).strftime("%Y-%m-%d")
             timestamp_column = self.config.get_columns(financial_category)[self.config.get_timestamp_column(financial_category)]
-            list_of_ids = self.lark_client.get_table_records_id_at_date(table_name, 
-                                                                        day_str, 
-                                                                        timestamp_column)
+            list_of_ids = self.lark_client.get_table_records_id_at_head_date(table_name, 
+                                                                        timestamp_column,
+                                                                        wiki_obj_token)
             self.lark_client.delete_records_by_id(table_name, list_of_ids, wiki_obj_token)
-            self._upload_data(FinancialQueries(financial_category, 'day', date.today().strftime("%Y-%m-%d")), table_name)
+            self.upload_data(FinancialQueries(financial_category, 'day', date.today().strftime("%Y-%m-%d")), table_name)
             
         except Exception as e:
             logger.error(f"Failed to sync most recent data: {e}")

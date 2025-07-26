@@ -6,14 +6,15 @@ from src.config import FinancialQueries
 
 if __name__ == "__main__":
     test = DataSyncClient(".env", "config.json")
-    test.sync_most_recent_data('C01', "影票销售明细")
+    # test.sync_most_recent_data('C01', "影票销售明细")
+    t = test.lark_client.get_table_records_id_at_head_date("影票销售明细",  "销售时间")
     # test._upload_most_recent_data('C01', '影票销售明细')
     # test.lark_client.delete_table("影票销售明细")
 
 
     # test.download_data(FinancialQueries("C01", 'day', '2025-07-26'))
     # t = test.lark_client.get_table_records_id_at_date("影票销售明细", '2025-07-14', '销售时间')
-    # test.lark_client.delete_records_by_id("影票销售明细", t)
+    test.lark_client.delete_records_by_id("影票销售明细", t)
     # test._upload_most_recent_data("C01", "影票销售明细")
     # list_of_id = test.lark_client.get_table_records_id_before_some_day("影票销售明细", some_day=13, time_stamp_column_name="销售时间")
     # test.lark_client.delete_records("影票销售明细", list_of_id)

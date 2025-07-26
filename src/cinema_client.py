@@ -292,3 +292,6 @@ class YKYRequester:
         except Exception as e:
             logger.error(f"Financial data retrieval failed: {e}")
             raise Exception(f"Failed to get financial data for {financial_category} on {search_date}: {e}") from e
+        
+    
+    

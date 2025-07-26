@@ -10,11 +10,12 @@ import time
 
 import httpx
 import polars
+from tqdm import tqdm
 
 from . import exceptions
 from . import FINANCIAL_DATA_TYPE_MAP
 from . import sha1prng
-from tqdm import tqdm
+
 
 def download_urls(encrypted_urls: list[str],
                   financial_category: str,
@@ -265,7 +266,7 @@ def merge_csv_files(folder_path: str) -> polars.DataFrame:
         os.remove(os.path.join(folder_path, filename))
     return polars.concat(dfs, how="vertical")
 
-def order_by_time(path: str, timestamp_col: str = 0):
+def order_by_time(path: str, timestamp_col: int = 0):
     """
     读取 CSV 文件，按时间列排序并覆盖原文件。
 
