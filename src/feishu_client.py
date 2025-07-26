@@ -355,7 +355,22 @@ class FeishuClient:
             raise
 
 
-    def get_all_column_ids(self, table_name: str, wiki_obj_token: Optional[str] = None):
+    def get_all_column_ids(self,
+                           table_name: str, 
+                           wiki_obj_token: Optional[str] = None):
+        """
+        获取指定表格的所有列ID信息。
+        
+        Args:
+            table_name (str): 表格名称。
+            wiki_obj_token (Optional[str]): wiki对象token，如果为None则使用默认值。
+            
+        Returns:
+            dict: 包含所有列信息的响应数据。
+            
+        Raises:
+            Exception: 当获取列信息失败时抛出。
+        """
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
@@ -387,6 +402,23 @@ class FeishuClient:
                        ids_to_delete: list[str],
                        wiki_obj_token: Optional[str] = None
                        ):
+        """
+        根据记录ID批量删除表格中的记录。
+        
+        该方法将待删除的记录ID列表分块处理，每次最多删除500条记录，
+        以符合飞书API的限制要求。
+        
+        Args:
+            table_name (str): 表格名称。
+            ids_to_delete (list[str]): 待删除的记录ID列表。
+            wiki_obj_token (Optional[str]): wiki对象token，如果为None则使用默认值。
+            
+        Returns:
+            dict: 最后一批删除操作的响应数据。
+            
+        Raises:
+            Exception: 当删除操作失败时抛出。
+        """
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
@@ -422,15 +454,26 @@ class FeishuClient:
             logger.error(f"Failed to delete records from table '{table_name}': {e}")
             raise
 
-    # def delete_records_by_date(self, 
-    #                            day: str):
-
-
     def get_table_records(self, 
                           table_name: str, 
                           page_size: int = 500,
                           page_token: Optional[str] = None, 
                           wiki_obj_token: Optional[str] = None):
+        """
+        获取表格记录数据，支持分页查询。
+        
+        Args:
+            table_name (str): 表格名称。
+            page_size (int): 每页记录数，默认为500（最大值）。
+            page_token (Optional[str]): 分页标记，用于获取下一页数据。
+            wiki_obj_token (Optional[str]): wiki对象token，如果为None则使用默认值。
+            
+        Returns:
+            dict: 包含记录数据的响应信息，包括items、total、page_token等字段。
+            
+        Raises:
+            Exception: 当获取记录失败时抛出。
+        """
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
             
@@ -615,7 +658,7 @@ class FeishuClient:
                     except ValueError as ve:
                         logger.warning(f"Invalid datetime format in record {field.get('record_id', 'unknown')}: {ve}")
                         continue
-                    
+
                     if record_date != first_date:
                         logger.info(f"Encountered different date {record_date}, stopping pagination")
                         return list_of_id
