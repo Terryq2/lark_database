@@ -5,6 +5,7 @@ from datetime import datetime
 import hashlib
 import hmac
 import os
+import base64
 import time
 
 import httpx
@@ -146,7 +147,7 @@ def combine_data_files(file_paths: list[str],
     输出文件将命名为 "<数据类型名称>.csv"，并保存在以对应数据类型名称命名的文件夹中。
     该名称由 `FINANCIAL_DATA_TYPE_MAP` 字典通过 `financial_category` 键确定。
 
-    参数:
+    Args:
         file_paths (list[str]): 输入 CSV 文件路径列表。
         financial_category (str): 财务数据类型编码，需存在于 `FINANCIAL_DATA_TYPE_MAP` 中。
         remove_files_after_finish (bool): 如果为真则再合并结束后，删除所有输入数据
@@ -213,10 +214,10 @@ def read_csv(path: str):
         ],
         ...
     ]
-    参数:
+    Args:
         path (str): CSV 文件的路径。
 
-    返回:
+    Returns:
         list: 包含多个记录块的列表，每个块是一个字典列表，字典包含 'fields' 键，对应 CSV 行的字段字典。
 
     异常:
@@ -271,10 +272,10 @@ def order_by_time(path: str, timestamp_col: str = 0):
     该函数读取指定路径的 CSV 文件，将第一列解析为日期时间格式，按升序排序后，
     将日期时间格式转换回字符串，并覆盖原文件保存排序后的数据。
 
-    参数:
+    Args:
         path (str): CSV 文件的路径。
 
-    返回:
+    Returns:
         None
 
     异常:
@@ -312,7 +313,7 @@ def get_past_days_this_month():
 
     例如，如果今天是 2025 年 7 月 23 日，函数将返回从 '2025-07-01' 到 '2025-07-22' 的所有日期。
 
-    返回值：
+    Returns值：
         list[str]: 当前月份中从1号到昨天的所有日期字符串列表。
     """
     today = datetime.now()
@@ -334,3 +335,9 @@ def find_matching_table(json_data, table_name):
     for table in json_data.get("data", {}).get("items", []):
         if table.get("name") == table_name:
             return table.get("table_id")
+        
+def encode_string_to_base64(text: str) -> str:
+    """Encode a string to base64"""
+    # Convert string to bytes, then encode to base64, then back to string
+    encoded_bytes = base64.b64encode(text.encode('utf-8'))
+    return encoded_bytes.decode('utf-8')

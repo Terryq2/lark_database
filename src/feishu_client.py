@@ -1,12 +1,20 @@
 import os
 import logging
+from datetime import datetime, timedelta, date, time
 from typing import Optional, Dict, Any, List
 import httpx
 from tqdm import tqdm
 
+
+
 from utility.helpers import read_csv, find_matching_table
 import src.config as config
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -42,10 +50,19 @@ class FeishuClient:
             headers["Authorization"] = f"Bearer {self.get_tenant_access_token_from_feishu()}"
         return headers
 
+    def _initialize_request(self, table_name: str, wiki_obj_token: str):
+        if wiki_obj_token is None:
+                wiki_obj_token = self.get_wiki_obj_token(self.config.get("WIKI_APP_TOKEN"))
+
+        json_data = self.get_wiki_all_table_info(wiki_obj_token)
+        table_id = find_matching_table(json_data, table_name)
+        return table_id, wiki_obj_token
+
+
     def _make_request(
-        self, 
-        method: str, 
-        url: str, 
+        self,
+        method: str,
+        url: str,
         headers: Optional[Dict[str, str]] = None,
         json_data: Optional[Dict] = None,
         params: Optional[Dict] = None,
@@ -61,6 +78,7 @@ class FeishuClient:
                 params=params,
                 timeout=timeout
             )
+            # logger.info(response.content)
             response.raise_for_status()
             return response
 
@@ -71,10 +89,10 @@ class FeishuClient:
         该方法调用飞书开放平台接口 `/wiki/v2/spaces/get_node`，根据传入的 wiki 节点 token（node_token），
         获取对应文档的元数据，并返回可用于后续访问或操作该文档的 obj_token。
 
-        参数:
+        Args:
             node_token (str): 表示 wiki 节点的 token，来自飞书文档空间。
 
-        返回:
+        Returns:
             str: 与该节点关联的 obj_token。
 
         异常:
@@ -106,30 +124,26 @@ class FeishuClient:
         """
         读取 CSV 文件并将数据以 POST 请求发送到飞书多维表格。
 
-        参数:
+        Args:
             path (str): CSV 文件的路径。
             wiki_obj_token (str): wiki对象token。
             table_name (str): 表格名称。
             financial_category (str): 财务数据类别。
 
-        返回:
+        Returns:
             dict: 飞书 API 的响应内容。
         """
         logger.info(f"Starting CSV upload from '{path}' to table '{table_name}'")
 
         try:
-            # 获取或创建表格
-            table_infos = self.get_wiki_all_table_info(wiki_obj_token)
-            found_table_id = find_matching_table(table_infos, table_name)
+            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            if found_table_id is not None:
-                table_id = found_table_id
+            if table_id is not None:
                 logger.info(f"Using existing table with ID: {table_id}")
             else:
                 table_id = self.create_new_table(wiki_obj_token, table_name, financial_category)
                 logger.info(f"Created new table with ID: {table_id}")
 
-            # 准备上传
             url = f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/records/batch_create"
             headers = self._get_headers()
             request_bodies = read_csv(path)
@@ -138,37 +152,34 @@ class FeishuClient:
                 logger.warning("No data found in CSV file")
                 return
 
-            # 上传数据
             print("Uploading: ", path)
             for i, request_body in enumerate(tqdm(request_bodies, ncols=70, unit='chunk')):
                 try:
                     response = self._make_request(
                         "POST", 
-                        url, 
-                        headers=headers, 
+                        url,
+                        headers=headers,
                         json_data={"records": request_body}
                     )
-                    
+
                     response_data = response.json()
-                    if response_data.get('msg') != 'success':
-                        print(response.content)
-                        raise httpx.HTTPError(f"Post failed")
+                    if response_data['code'] != 0:
+                        raise Exception('Something bad happened (Check table naming?)')
 
                     print("......")
                     logger.debug(f"Successfully uploaded chunk {i+1}/{len(request_bodies)}")
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to upload chunk {i+1}: {e}")
                     raise
 
             print("Done")
             logger.info(f"Successfully uploaded all data from '{path}'")
-            
+
         except Exception as e:
             logger.error(f"CSV upload failed: {e}")
             raise
         finally:
-            # 清理文件
             try:
                 if os.path.exists(path):
                     os.remove(path)
@@ -181,19 +192,19 @@ class FeishuClient:
         在由app_token指定的位置生成一个名字为file_name的表格。
         表格字段由financial_category决定
 
-        参数:
+        Args:
             wiki_obj_token (str): wiki对象token。
             file_name (str): 表格名称。
             financial_category (str): 财务数据类别。
 
-        返回:
+        Returns:
             str: 创建的表格ID。
 
         异常:
             Exception: 当表格创建失败时抛出。
         """
         logger.info(f"Creating new table '{file_name}' for category '{financial_category}'")
-        
+
         url = f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/tables"
         headers = self._get_headers()
 
@@ -209,17 +220,17 @@ class FeishuClient:
                     "fields": format_headers(column_names)
                 }
             }
-            
+
             response = self._make_request("POST", url, headers=headers, json_data=request_body)
             response_data = response.json()
-            
-            if response_data.get('msg') != 'success':
-                logger.error(f"Table creation failed: {response_data.get('msg', 'Unknown error')}")
-                raise httpx.HTTPError("Request failed: Check table naming?")           
+
+            if response_data['code'] != 0:
+                raise Exception('Something bad happened (Check table naming?)')
+                   
             table_id = response_data['data']['table_id']
             logger.info(f"Successfully created table '{file_name}' with ID: {table_id}")
             return table_id
-            
+
         except Exception as e:
             logger.error(f"Failed to create table '{file_name}': {e}")
             raise
@@ -254,9 +265,9 @@ class FeishuClient:
             - 返回的令牌有有效期，需根据飞书文档处理令牌过期情况。
         """
         logger.debug("Fetching tenant access token")
-        
+
         url = f"{self.BASE_URL}/auth/v3/tenant_access_token/internal"
-        headers = {"Content-Type": "application/json"}
+        headers = self._get_headers(False)
         request_body = {
             "app_id": self.config.get("FEISHU_APP_KEY"),
             "app_secret": self.config.get("FEISHU_APP_SECRET")
@@ -267,7 +278,7 @@ class FeishuClient:
             token = response.json()['tenant_access_token']
             logger.debug("Successfully obtained tenant access token")
             return token
-            
+
         except KeyError as e:
             logger.error(f"Invalid token response format: missing {e}")
             raise
@@ -279,26 +290,31 @@ class FeishuClient:
         """
         获取wiki中所有表格信息。
 
-        参数:
+        Args:
             wiki_obj_token (str): wiki对象token。
 
-        返回:
+        Returns:
             dict: 表格信息字典。
 
         异常:
             httpx.HTTPStatusError: 当API请求失败时抛出。
         """
         logger.debug(f"Fetching table info for wiki: {wiki_obj_token}")
-        
+
         url = f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/tables"
         headers = self._get_headers()
 
         try:
             response = self._make_request("GET", url, headers=headers, params={})
             table_info = response.json()
+
+            if table_info['code'] != 0:
+                raise Exception('Something bad happened')
+
+
             logger.debug(f"Found {len(table_info.get('data', {}).get('items', []))} tables")
             return table_info
-            
+ 
         except Exception as e:
             logger.error(f"Failed to get table info: {e}")
             raise
@@ -307,40 +323,204 @@ class FeishuClient:
         """
         删除指定的表格。
 
-        参数:
+        Args:
             table_name (str): 表格名称。
             wiki_obj_token (Optional[str]): wiki对象token，如果为None则使用默认值。
 
-        返回:
+        Returns:
             dict: 删除操作的响应数据。
 
         异常:
             Exception: 当表格不存在或删除失败时抛出。
         """
         logger.info(f"Deleting table '{table_name}'")
-        
+
         try:
-            if wiki_obj_token is None:
-                wiki_obj_token = self.get_wiki_obj_token(self.config.get("WIKI_APP_TOKEN"))
+            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            # 查找表格
-            json_data = self.get_wiki_all_table_info(wiki_obj_token)
-            table_id = find_matching_table(json_data, table_name)
-            
-            if table_id is None:
-                logger.error(f"Table '{table_name}' not found")
-                raise Exception("Non existent table")
-
-            # 删除表格
             url = f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}"
             headers = self._get_headers()
 
             response = self._make_request("DELETE", url, headers=headers)
             result = response.json()
-            
+
+            if response['code'] != 0:
+                raise Exception('Something bad happened')
+   
             logger.info(f"Successfully deleted table '{table_name}'")
             return result
-            
+
         except Exception as e:
             logger.error(f"Failed to delete table '{table_name}': {e}")
             raise
+
+
+    def get_all_column_ids(self, table_name: str, wiki_obj_token: Optional[str] = None):
+        try:
+            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+
+            url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/fields"
+
+
+            headers = self._get_headers()
+
+            request_body = {
+                "page_size": "100"
+            }
+
+            response = self._make_request("POST", url, headers=headers, json_data=request_body)
+            result = response.json()
+
+            if response['code'] != 0:
+                raise Exception('Something bad happened')
+
+            logger.info(f"Successfully fetched column ids from '{table_name}'")
+    
+        except Exception as e:
+            logger.error(f"Failed to fetch table '{table_name}': {e}")
+            raise
+    
+        return result
+    
+    def delete_records_by_id(self,
+                       table_name: str,
+                       ids_to_delete: list[str],
+                       wiki_obj_token: Optional[str] = None
+                       ):
+        try:
+            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+
+            url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/records/batch_delete"
+
+            headers = self._get_headers()
+
+            MAX_CHUNK_SIZE = 500
+            
+
+            already_sent = 0
+
+            while already_sent < len(ids_to_delete):
+                if len(ids_to_delete) - already_sent < MAX_CHUNK_SIZE:
+                    can_send = len(ids_to_delete) - already_sent
+                else:
+                    can_send = MAX_CHUNK_SIZE
+
+                request_body = {
+                    "records": [ids_to_delete[i] for i in range(already_sent, already_sent + can_send)] # Use max allowed for efficiency
+                }
+                response = self._make_request("POST", url, headers=headers, json_data=request_body)
+                result = response.json()
+                if result['code'] != 0:
+                    raise Exception('Something bad happened')
+                
+                already_sent += can_send
+
+            print(result)
+            logger.info(f"Successfully deleted records from '{table_name}'")
+
+            return result
+        except Exception as e:
+            logger.error(f"Failed to delete records from table '{table_name}': {e}")
+            raise
+
+    def get_table_records(self, 
+                          table_name: str, 
+                          page_size: int = 500,
+                          page_token: Optional[str] = None, 
+                          wiki_obj_token: Optional[str] = None):
+        try:
+            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+            
+            url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/records/search"
+            
+            headers = self._get_headers()
+            
+            # Prepare request body (not URL params)
+            request_body = {
+                "page_size": page_size # Use max allowed for efficiency
+            }
+            
+            if page_token is not None:
+                request_body["page_token"] = page_token
+            
+            # Pass request_body as JSON data, not params
+            response = self._make_request("POST", url, headers=headers, params=request_body, json_data={})
+            result = response.json()
+            if result['code'] != 0:
+                raise Exception('Something bad happened')
+            
+            logger.info(f"Successfully fetched records from '{table_name}': {len(result.get('data', {}).get('items', []))} records")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch table '{table_name}': {e}")
+            raise
+    
+    def get_table_records_id_before_some_day(self, 
+                              table_name: str,
+                              some_day: int = 13,
+                              time_stamp_column_name: str = None, 
+                              wiki_obj_token: Optional[str] = None) -> list[str]:
+        
+        """
+        获取指定表中某时间列早于指定天数的记录ID列表。
+
+        本函数将从飞书多维表中读取数据，筛选出在指定时间点（默认是今天往前推 some_day 天的凌晨）
+        之前的所有记录，并返回这些记录的 record_id 及对应的时间。
+
+        Args:
+            table_name (str): 飞书多维表的名称。
+            some_day (int, optional): 相对于今天往前推的天数，用于计算时间筛选的截止点，默认为 13。
+            time_stamp_column_name (str, optional): 时间戳字段的列名，用于判断记录的时间。
+            wiki_obj_token (Optional[str], optional): 飞书 Wiki 的对象 token，用于指定具体数据表空间。
+
+        Returns:
+            list[str]: 包含满足条件的记录ID及时间的元组列表，每个元素为 (record_id, datetime)。
+
+        Raises:
+            Exception: 若获取或解析数据过程中出现异常，则抛出。
+        """
+
+        try:
+            response = self.get_table_records(table_name, wiki_obj_token=wiki_obj_token)
+
+            if response['code'] != 0:
+                raise Exception('Something bad happened')
+
+            list_of_id = []
+            already_read = 0
+            total_records = response['data']['total']
+            cutoff = datetime.combine(date.today() - timedelta(days=some_day), time.min)
+    
+            for field in response['data']['items']:
+                dt_obj = datetime.strptime(field["fields"][time_stamp_column_name][0]['text'], "%Y-%m-%d %H:%M:%S")
+                if (dt_obj > cutoff):
+                    return list_of_id
+                list_of_id.append(field['record_id'])
+            
+            already_read += len(response['data']['items'])
+
+            while already_read < total_records:
+                response = self.get_table_records(table_name, page_token=response['data']['page_token'], wiki_obj_token=wiki_obj_token)
+
+                if response['code'] != 0:
+                    raise Exception('Something bad happened')
+                
+                for field in response['data']['items']:
+                    dt_obj = datetime.strptime(field["fields"][time_stamp_column_name][0]['text'], "%Y-%m-%d %H:%M:%S")
+                    if (dt_obj > cutoff):
+                        return list_of_id
+                    list_of_id.append(field['record_id'])
+
+                already_read += len(response['data']['items'])
+                
+            
+            logger.info(f"Successfully fetched list of records from '{table_name}'")
+        
+
+        except Exception as e:
+            logger.error(f"Failed to fetch table '{table_name}': {e}")
+            raise
+    
+        

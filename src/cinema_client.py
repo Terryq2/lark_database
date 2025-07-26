@@ -1,5 +1,7 @@
 """This is a class that helps fetching data from the yuekeyun website"""
 import logging
+import os
+import datetime
 
 from utility import exceptions
 from utility import FINANCIAL_DATA_TYPE_MAP
@@ -14,6 +16,10 @@ from utility.helpers import (
 from utility import sha1prng
 import src.config as config
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -74,6 +80,8 @@ class YKYRequester:
         if timespan not in self.VALID_TIMESPANS:
             logger.error(f"Invalid timespan: {timespan}. Must be one of {self.VALID_TIMESPANS}")
             raise exceptions.InvalidTimespanException()
+        
+        datetime.datetime.strptime(search_date, "%Y-%m-%d")
 
         logger.debug(f"Input validation passed for category: {financial_category}, timespan: {timespan}")
 
@@ -138,13 +146,11 @@ class YKYRequester:
         try:
             response = query_data(self.API_NAME, query_parameters, self.config.get("APP_KEY"))
             
-            # 检查响应状态
             if not response or response.status_code != 200:
                 raise Exception(f"API request failed with status: {response.status_code if response else 'No response'}")
 
             response_data = response.json()
             
-            # 验证响应数据结构
             if 'data' not in response_data or 'bizData' not in response_data['data']:
                 raise Exception("Invalid API response structure")
 
@@ -181,11 +187,9 @@ class YKYRequester:
             Exception: 当数据处理失败时抛出。
         """
         try:
-            # 初始化解密器
             decrypter = sha1prng.Decrypter(self.config.get("LEASE_CODE"))
             logger.debug("Decrypter initialized")
 
-            # 下载文件
             logger.info(f"Starting download of {len(download_url_list)} files")
             file_name_stack = download_urls(download_url_list, financial_category, decrypter, search_date)
             
@@ -195,11 +199,9 @@ class YKYRequester:
 
             logger.info(f"Downloaded {len(file_name_stack)} files successfully")
 
-            # 合并数据文件
             logger.info("Combining data files")
             output_csv = combine_data_files(file_name_stack, financial_category, search_date, True)
 
-            # 按时间排序
             logger.info("Ordering data by timestamp")
             timestamp_column = self.config.get_timestamp_column(financial_category)
             order_by_time(output_csv, timestamp_column)
@@ -209,7 +211,6 @@ class YKYRequester:
             
         except Exception as e:
             logger.error(f"Failed to process downloaded data: {e}")
-            # 清理可能已下载的文件
             self._cleanup_on_error(file_name_stack if 'file_name_stack' in locals() else [])
             raise
 
@@ -226,7 +227,6 @@ class YKYRequester:
         
         for file_path in file_list:
             try:
-                import os
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     logger.debug(f"Removed file: {file_path}")
@@ -269,31 +269,25 @@ class YKYRequester:
                    f"timespan={timespan}, date={search_date}")
 
         try:
-            # 1. 验证输入参数
             self._validate_inputs(financial_category, timespan, search_date)
 
-            # 2. 构建查询参数
             query_parameters = self._build_query_parameters(financial_category, timespan, search_date)
 
-            # 3. 生成API签名
             aop_signature = self._generate_signature(query_parameters)
             query_parameters["_aop_signature"] = aop_signature
 
-            # 4. 获取下载URL
             download_url_list = self._fetch_download_urls(query_parameters)
             
             if not download_url_list:
                 logger.warning("No download URLs available, returning empty result")
                 return ""
-
-            # 5. 处理下载的数据
+            
             output_csv = self._process_downloaded_data(download_url_list, financial_category, search_date)
             
             logger.info(f"Financial data retrieval completed successfully: {output_csv}")
             return output_csv
 
         except (exceptions.InvalidFinancialCategoryException, exceptions.InvalidTimespanException):
-            # 重新抛出已知的验证异常
             raise
         except Exception as e:
             logger.error(f"Financial data retrieval failed: {e}")
