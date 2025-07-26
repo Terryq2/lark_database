@@ -396,7 +396,6 @@ class FeishuClient:
 
             MAX_CHUNK_SIZE = 500
             
-
             already_sent = 0
 
             while already_sent < len(ids_to_delete):
@@ -422,6 +421,10 @@ class FeishuClient:
         except Exception as e:
             logger.error(f"Failed to delete records from table '{table_name}': {e}")
             raise
+
+    # def delete_records_by_date(self, 
+    #                            day: str):
+
 
     def get_table_records(self, 
                           table_name: str, 
@@ -456,71 +459,67 @@ class FeishuClient:
         except Exception as e:
             logger.error(f"Failed to fetch table '{table_name}': {e}")
             raise
-    
-    def get_table_records_id_before_some_day(self, 
-                              table_name: str,
-                              some_day: int = 13,
-                              time_stamp_column_name: str = None, 
-                              wiki_obj_token: Optional[str] = None) -> list[str]:
-        
-        """
-        获取指定表中某时间列早于指定天数的记录ID列表。
 
-        本函数将从飞书多维表中读取数据，筛选出在指定时间点（默认是今天往前推 some_day 天的凌晨）
-        之前的所有记录，并返回这些记录的 record_id 及对应的时间。
+    def get_table_records_id_at_date(self, 
+                                    table_name: str,
+                                    day: str,
+                                    time_stamp_column_name: str = None, 
+                                    wiki_obj_token: Optional[str] = None) -> list[str]:
+        """
+        获取指定日期（精确到日）对应的记录ID。
+
+        假设表中的记录按时间升序排序，一旦遇到日期大于目标日期的记录，即可提前终止遍历。
 
         Args:
             table_name (str): 飞书多维表的名称。
-            some_day (int, optional): 相对于今天往前推的天数，用于计算时间筛选的截止点，默认为 13。
-            time_stamp_column_name (str, optional): 时间戳字段的列名，用于判断记录的时间。
-            wiki_obj_token (Optional[str], optional): 飞书 Wiki 的对象 token，用于指定具体数据表空间。
+            day (str): 指定的日期，格式为 'YYYY-M-D'（如 '2025-7-14'）。
+            time_stamp_column_name (str, optional): 时间戳列名。
+            wiki_obj_token (Optional[str], optional): Wiki 表对象 token。
 
         Returns:
-            list[str]: 包含满足条件的记录ID及时间的元组列表，每个元素为 (record_id, datetime)。
-
-        Raises:
-            Exception: 若获取或解析数据过程中出现异常，则抛出。
+            list[str]: 所有时间戳字段的日期等于 `day` 的记录ID列表。
         """
-
         try:
-            response = self.get_table_records(table_name, wiki_obj_token=wiki_obj_token)
+            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            if response['code'] != 0:
-                raise Exception('Something bad happened')
-
+            target_date = datetime.strptime(day, "%Y-%m-%d").date()
             list_of_id = []
             already_read = 0
+
+            response = self.get_table_records(table_name, wiki_obj_token=wiki_obj_token)
+
             total_records = response['data']['total']
-            cutoff = datetime.combine(date.today() - timedelta(days=some_day), time.min)
-    
-            for field in response['data']['items']:
-                dt_obj = datetime.strptime(field["fields"][time_stamp_column_name][0]['text'], "%Y-%m-%d %H:%M:%S")
-                if (dt_obj > cutoff):
-                    return list_of_id
-                list_of_id.append(field['record_id'])
-            
-            already_read += len(response['data']['items'])
 
             while already_read < total_records:
-                response = self.get_table_records(table_name, page_token=response['data']['page_token'], wiki_obj_token=wiki_obj_token)
-
-                if response['code'] != 0:
-                    raise Exception('Something bad happened')
-                
                 for field in response['data']['items']:
                     dt_obj = datetime.strptime(field["fields"][time_stamp_column_name][0]['text'], "%Y-%m-%d %H:%M:%S")
-                    if (dt_obj > cutoff):
+                    record_date = dt_obj.date()
+
+                    if record_date > target_date:
+                        # Early termination — all subsequent records will be after target_date
+                        logger.info(f"Early termination at {record_date}, no more records for {target_date}")
                         return list_of_id
-                    list_of_id.append(field['record_id'])
+                    
+                    if record_date == target_date:
+                        list_of_id.append(field['record_id'])
 
                 already_read += len(response['data']['items'])
+
+                if already_read >= total_records or 'page_token' not in response['data']:
+                    break
+
+                response = self.get_table_records(
+                    table_name,
+                    page_token=response['data']['page_token'],
+                    wiki_obj_token=wiki_obj_token
+                )
                 
-            
-            logger.info(f"Successfully fetched list of records from '{table_name}'")
-        
+            logger.info(f"Successfully fetched {len(list_of_id)} record(s) from '{table_name}' for date {target_date}")
+            return list_of_id
 
         except Exception as e:
             logger.error(f"Failed to fetch table '{table_name}': {e}")
             raise
+
     
         

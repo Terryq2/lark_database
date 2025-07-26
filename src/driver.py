@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional
 import logging
 from pathlib import Path
@@ -258,7 +258,7 @@ class DataSyncClient:
             self,
             financial_category: str,
             table_name: str,
-            looking_back: int = 13,
+            looking_back: int = 14,
             wiki_obj_token: Optional[str] = None
     ) -> None:
         if not financial_category.strip():
@@ -276,13 +276,13 @@ class DataSyncClient:
                     self.config.get("WIKI_APP_TOKEN")
                 )
             
-            list_of_ids = self.lark_client.get_table_records_id_before_some_day(table_name, 
-                                                                  looking_back, 
-                                                                  self.config.get_columns(self.config.get_timestamp_column(financial_category)), 
-                                                                  wiki_obj_token)
-            self.lark_client.delete_records("影票销售明细", list_of_ids)
-
-            self.lark_client 
+            day_str = (date.today() - timedelta(days=looking_back)).strftime("%Y-%m-%d")
+            timestamp_column = self.config.get_columns(financial_category)[self.config.get_timestamp_column(financial_category)]
+            list_of_ids = self.lark_client.get_table_records_id_at_date(table_name, 
+                                                                        day_str, 
+                                                                        timestamp_column)
+            self.lark_client.delete_records_by_id(table_name, list_of_ids, wiki_obj_token)
+            self._upload_data(FinancialQueries(financial_category, 'day', date.today().strftime("%Y-%m-%d")), table_name)
             
         except Exception as e:
             logger.error(f"Failed to sync most recent data: {e}")
