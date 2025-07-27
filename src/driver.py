@@ -62,6 +62,11 @@ class DataSyncClient:
             logger.error(f"Failed to initialize DataSyncClient: {e}")
             raise
 
+    def _get_timestamp_column_name(self, financial_category: str):
+        column_names = self.config.get_columns(financial_category)
+        return column_names[self.config.get_timestamp_column(financial_category)]
+
+
     def download_data(self, queries: FinancialQueries) -> None:
         """从Yuekeyun API获取财务数据。不上传数据。
 
@@ -79,9 +84,9 @@ class DataSyncClient:
         """
         if not queries or not queries.to_tuple():
             raise ValueError("Queries cannot be empty")
-            
+
         logger.info(f"Starting download of {len(queries.to_tuple())} financial data queries")
-        
+
         try:
             for query in queries.to_tuple():
                 self.cinema_client.get_financial_data(query)
@@ -91,9 +96,9 @@ class DataSyncClient:
             raise
 
     def upload_data(
-        self, 
-        queries: FinancialQueries, 
-        table_name: str, 
+        self,
+        queries: FinancialQueries,
+        table_name: str,
         wiki_obj_token: Optional[str] = None
     ) -> None:
         """从Yuekeyun API获取财务数据并上传至飞书。
@@ -129,29 +134,29 @@ class DataSyncClient:
 
             query_tuples = queries.to_tuple()
             output_csv_paths = []
-            
+
             for query in query_tuples:
                 csv_path = self.cinema_client.get_financial_data(query)
                 output_csv_paths.append(csv_path)
 
             category_folder = FINANCIAL_DATA_TYPE_MAP[queries.category]
             output_path = Path(category_folder) / f"{category_folder}.csv"
-            
+
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             df = merge_csv_files(category_folder)
             df.write_csv(str(output_path))
 
-            first_query_category = queries.category
+            financial_category = queries.category
             self.lark_client.post_csv_data_to_feishu(
                 str(output_path),
-                wiki_obj_token,
                 table_name,
-                first_query_category
+                financial_category,
+                wiki_obj_token
             )
-            
+
             logger.info(f"Successfully synced financial data to table '{table_name}'")
-            
+
         except Exception as e:
             logger.error(f"Failed to sync financial data: {e}")
             raise
@@ -189,25 +194,25 @@ class DataSyncClient:
                 )
 
             current_time = datetime.now()
-            
+
             # Create queries for all months from January to current month (exclusive)
             queries = FinancialQueries(
-                financial_category, 
+                financial_category,
                 "month", 
                 f"{current_time.year}-01"  # Start from January
             )
-            
+
             # Add remaining months
             for month in range(2, current_time.month):
                 queries.add_new_query("month", f"{current_time.year}-{month:02d}")
-            
+
             # Add days of current month
             for day in range(1, current_time.day):
                 date_str = f"{current_time.year}-{current_time.month:02d}-{day:02d}"
                 queries.add_new_query("day", date_str)
 
             self.upload_data(queries, table_name, wiki_obj_token)
-            
+
         except Exception as e:
             logger.error(f"Failed to sync current year data: {e}")
             raise
@@ -241,7 +246,8 @@ class DataSyncClient:
         if looking_back <= 0:
             raise ValueError("Looking back days must be positive")
 
-        logger.info(f"Uploading most recent {looking_back} days for category '{financial_category}'")
+        logger.info(f"""Uploading most recent {looking_back}
+                    days for category '{financial_category}'""")
 
         try:
             if wiki_obj_token is None:
@@ -251,24 +257,23 @@ class DataSyncClient:
 
             current_time = datetime.now()
             start_date = current_time - timedelta(days=looking_back)
-            
+
             queries = FinancialQueries(
-                financial_category, 
+                financial_category,
                 "day", 
                 start_date.strftime("%Y-%m-%d")
             )
 
             # Add remaining days (note: corrected the range logic)
             for i in range(looking_back - 1, 0, -1):
-                date = (current_time - timedelta(days=i)).strftime("%Y-%m-%d")
-                queries.add_new_query('day', date)
+                current_date = (current_time - timedelta(days=i)).strftime("%Y-%m-%d")
+                queries.add_new_query('day', current_date)
 
             self.upload_data(queries, table_name, wiki_obj_token)
-            
+
         except Exception as e:
             logger.error(f"Failed to upload most recent data: {e}")
             raise
-    
 
     def sync_most_recent_data(
             self,
@@ -305,15 +310,17 @@ class DataSyncClient:
                 wiki_obj_token = self.lark_client.get_wiki_obj_token(
                     self.config.get("WIKI_APP_TOKEN")
                 )
-            
-            day_str = (date.today() - timedelta(days=looking_back)).strftime("%Y-%m-%d")
-            timestamp_column = self.config.get_columns(financial_category)[self.config.get_timestamp_column(financial_category)]
-            list_of_ids = self.lark_client.get_table_records_id_at_head_date(table_name, 
+
+            timestamp_column = self._get_timestamp_column_name(financial_category)
+            list_of_ids = self.lark_client.get_table_records_id_at_head_date(table_name,
                                                                         timestamp_column,
                                                                         wiki_obj_token)
             self.lark_client.delete_records_by_id(table_name, list_of_ids, wiki_obj_token)
-            self.upload_data(FinancialQueries(financial_category, 'day', date.today().strftime("%Y-%m-%d")), table_name)
-            
+            query_data_today = FinancialQueries(financial_category,
+                                                'day',
+                                                date.today().strftime("%Y-%m-%d"))
+            self.upload_data(query_data_today, table_name)
+
         except Exception as e:
             logger.error(f"Failed to sync most recent data: {e}")
             raise
