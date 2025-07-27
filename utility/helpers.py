@@ -125,7 +125,7 @@ def get_signature(api_name: str,
 def combine_data_files(file_paths: list[str],
                        financial_category: str,
                        search_date: str,
-                       remove_files_after_finish: bool):
+                       remove_files_after_finish: bool) -> str | None:
     """
     将多个财务数据 CSV 文件合并为一个输出文件，跳过注释行和重复的表头。
     
@@ -146,11 +146,11 @@ def combine_data_files(file_paths: list[str],
         # 输出文件将写入 商品订单数据/商品订单数据.csv
     """
     if not file_paths:
-        return
+        return None
 
-    output_path = f"""{FINANCIAL_DATA_TYPE_MAP[financial_category]}/
-                      {FINANCIAL_DATA_TYPE_MAP[financial_category]}
-                      _({search_date}).csv"""
+    output_path = (f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/"
+                      f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}"
+                      f"_({search_date}).csv")
 
     def get_filtered_lines(path):
         with open(path, "r", encoding="utf-8") as f:
@@ -397,3 +397,24 @@ def find_matching_table(json_data: dict[Any, Any] , table_name: str | None) -> s
                 return table.get("table_id")
     except KeyError as e:
         raise KeyError("Json data is malformed or does not contain a data field") from e
+
+def make_request(
+    method: str,
+    url: str,
+    headers: dict[str, str] | None = None,
+    json_data: dict[Any, Any] | None = None,
+    params: dict[Any, Any] | None = None,
+    timeout: float = 30.0
+) -> httpx.Response:
+    """统一的HTTP请求方法"""
+    with httpx.Client() as client:
+        response = client.request(
+            method=method,
+            url=url,
+            headers=headers,
+            json=json_data,
+            params=params,
+            timeout=timeout
+        )
+        response.raise_for_status()
+    return response

@@ -3,14 +3,14 @@ import os
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-import httpx
 from tqdm import tqdm
 
-
-
-from utility.helpers import read_csv, find_matching_table
-import src.config as config
-
+from utility.helpers import (
+    read_csv,
+    find_matching_table,
+    make_request
+)
+from src import config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,30 +60,6 @@ class FeishuClient:
 
         return table_id, wiki_obj_token
 
-
-    def _make_request(
-        self,
-        method: str,
-        url: str,
-        headers: Optional[Dict[str, str]] = None,
-        json_data: Optional[Dict] = None,
-        params: Optional[Dict] = None,
-        timeout: float = DEFAULT_TIMEOUT
-    ) -> httpx.Response:
-        """统一的HTTP请求方法"""
-        with httpx.Client() as client:
-            response = client.request(
-                method=method,
-                url=url,
-                headers=headers,
-                json=json_data,
-                params=params,
-                timeout=timeout
-            )
-            logger.info(response.content)
-            response.raise_for_status()
-            return response
-
     def get_wiki_obj_token(self, node_token: str):
         """
         获取飞书云文档(wiki)的 obj_token。
@@ -110,7 +86,7 @@ class FeishuClient:
             "obj_type": "wiki"
         }
         try:
-            response = self._make_request("GET", url, headers=headers, params=params)
+            response = make_request("GET", url, headers=headers, params=params)
             obj_token = response.json()['data']['node']['obj_token']
             logger.info(f"Successfully obtained obj_token: {obj_token}")
             return obj_token
@@ -149,8 +125,8 @@ class FeishuClient:
                 table_id = self.create_new_table(wiki_obj_token, table_name, financial_category)
                 logger.info(f"Created new table with ID: {table_id}")
 
-            url = f"""{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}
-                      /tables/{table_id}/records/batch_create"""
+            url = (f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/"
+                   f"tables/{table_id}/records/batch_create")
             headers = self._get_headers()
             request_bodies = read_csv(path)
 
@@ -161,7 +137,7 @@ class FeishuClient:
             print("Uploading: ", path)
             for i, request_body in enumerate(tqdm(request_bodies, ncols=70, unit='chunk')):
                 try:
-                    self._make_request(
+                    make_request(
                         "POST", 
                         url,
                         headers=headers,
@@ -224,7 +200,7 @@ class FeishuClient:
                 }
             }
 
-            response = self._make_request("POST", url, headers=headers, json_data=request_body)
+            response = make_request("POST", url, headers=headers, json_data=request_body)
             response_data = response.json()
 
             table_id = response_data['data']['table_id']
@@ -274,7 +250,7 @@ class FeishuClient:
         }
 
         try:
-            response = self._make_request("POST", url, headers=headers, json_data=request_body)
+            response = make_request("POST", url, headers=headers, json_data=request_body)
             token = response.json()['tenant_access_token']
             logger.debug("Successfully obtained tenant access token")
             return token
@@ -305,7 +281,7 @@ class FeishuClient:
         headers = self._get_headers()
 
         try:
-            response = self._make_request("GET", url, headers=headers, params={})
+            response = make_request("GET", url, headers=headers, params={})
             table_info = response.json()
 
             logger.debug(f"Found {len(table_info.get('data', {}).get('items', []))} tables")
@@ -337,7 +313,7 @@ class FeishuClient:
             url = f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}"
             headers = self._get_headers()
 
-            response = self._make_request("DELETE", url, headers=headers)
+            response = make_request("DELETE", url, headers=headers)
             result = response.json()
 
             logger.info(f"Successfully deleted table '{table_name}'")
@@ -367,8 +343,8 @@ class FeishuClient:
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            url = f"""https://open.feishu.cn/open-apis/bitable
-                      /v1/apps/{wiki_obj_token}/tables/{table_id}/fields"""
+            url = (f"https://open.feishu.cn/open-apis/bitable"
+                   f"/v1/apps/{wiki_obj_token}/tables/{table_id}/fields")
 
 
             headers = self._get_headers()
@@ -377,7 +353,7 @@ class FeishuClient:
                 "page_size": "100"
             }
 
-            response = self._make_request("POST", url, headers=headers, json_data=request_body)
+            response = make_request("POST", url, headers=headers, json_data=request_body)
             result = response.json()
 
             logger.info(f"Successfully fetched column ids from '{table_name}'")
@@ -413,8 +389,8 @@ class FeishuClient:
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            url = f"""https://open.feishu.cn/open-apis/bitable/v1/apps/
-            {wiki_obj_token}/tables/{table_id}/records/batch_delete"""
+            url = (f"https://open.feishu.cn/open-apis/bitable/v1/apps/"
+                   f"{wiki_obj_token}/tables/{table_id}/records/batch_delete")
 
             headers = self._get_headers()
 
@@ -430,7 +406,7 @@ class FeishuClient:
                 request_body = {
                     "records": ids_to_delete[already_sent:already_sent + can_send]
                 }
-                self._make_request("POST", url, headers=headers, json_data=request_body)
+                make_request("POST", url, headers=headers, json_data=request_body)
 
                 already_sent += can_send
 
@@ -461,8 +437,8 @@ class FeishuClient:
         """
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
-            url = f"""https://open.feishu.cn/open-apis/bitable
-                      /v1/apps/{wiki_obj_token}/tables/{table_id}/records/search"""
+            url = ("https://open.feishu.cn/open-apis/bitable"
+                  f"/v1/apps/{wiki_obj_token}/tables/{table_id}/records/search")
             headers = self._get_headers()
 
             # Prepare request body (not URL params)
@@ -474,7 +450,7 @@ class FeishuClient:
                 request_body["page_token"] = page_token
 
             # Pass request_body as JSON data, not params
-            response = self._make_request("POST",
+            response = make_request("POST",
                                           url,
                                           headers=headers,
                                           params=request_body,
@@ -527,8 +503,8 @@ class FeishuClient:
 
                     if record_date > target_date:
                         # Early termination — all subsequent records will be after target_date
-                        logger.info(f"""Early termination at {record_date}
-                                    no more records for {target_date}""")
+                        logger.info(f"Early termination at {record_date}"
+                                    "no more records for {target_date}")
                         return list_of_id
 
                     if record_date == target_date:
@@ -545,8 +521,8 @@ class FeishuClient:
                     wiki_obj_token=wiki_obj_token
                 )
 
-            logger.info(f"""Successfully fetched {len(list_of_id)} record(s) from
-                        '{table_name}' for date {target_date}""")
+            logger.info(f"Successfully fetched {len(list_of_id)} record(s) from"
+                        f"'{table_name}' for date {target_date}")
             return list_of_id
 
         except Exception as e:
