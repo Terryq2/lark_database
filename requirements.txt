@@ -2,5 +2,5 @@ polars
 httpx
 datetime
 dotenv
-Crypto
+pycryptodome
 tqdm
