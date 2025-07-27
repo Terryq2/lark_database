@@ -1,6 +1,7 @@
+"""Module that manages interactions with Feishu"""
 import os
 import logging
-from datetime import datetime, timedelta, date, time
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 import httpx
 from tqdm import tqdm
@@ -50,12 +51,13 @@ class FeishuClient:
             headers["Authorization"] = f"Bearer {self.get_tenant_access_token_from_feishu()}"
         return headers
 
-    def _initialize_request(self, table_name: str, wiki_obj_token: str):
+    def _initialize_request(self, table_name: str | None, wiki_obj_token: str | None):
         if wiki_obj_token is None:
-                wiki_obj_token = self.get_wiki_obj_token(self.config.get("WIKI_APP_TOKEN"))
+            wiki_obj_token = self.get_wiki_obj_token(self.config.get("WIKI_APP_TOKEN"))
 
         json_data = self.get_wiki_all_table_info(wiki_obj_token)
         table_id = find_matching_table(json_data, table_name)
+
         return table_id, wiki_obj_token
 
 
@@ -78,7 +80,7 @@ class FeishuClient:
                 params=params,
                 timeout=timeout
             )
-            # logger.info(response.content)
+            logger.info(response.content)
             response.raise_for_status()
             return response
 
@@ -100,14 +102,13 @@ class FeishuClient:
             KeyError: 当返回数据中缺少预期字段（如 'data' 或 'node'）时抛出。
         """
         logger.info(f"Fetching wiki obj_token for node: {node_token}")
-        
+
         url = f"{self.BASE_URL}/wiki/v2/spaces/get_node"
         headers = self._get_headers()
         params = {
             "token": node_token,
             "obj_type": "wiki"
         }
-
         try:
             response = self._make_request("GET", url, headers=headers, params=params)
             obj_token = response.json()['data']['node']['obj_token']
@@ -120,7 +121,11 @@ class FeishuClient:
             logger.error(f"Failed to get wiki obj_token: {e}")
             raise
 
-    def post_csv_data_to_feishu(self, path: str, wiki_obj_token: str, table_name: str, financial_category: str):
+    def post_csv_data_to_feishu(self,
+                                path: str,
+                                table_name: str,
+                                financial_category: str,
+                                wiki_obj_token: str | None = None):
         """
         读取 CSV 文件并将数据以 POST 请求发送到飞书多维表格。
 
@@ -144,7 +149,8 @@ class FeishuClient:
                 table_id = self.create_new_table(wiki_obj_token, table_name, financial_category)
                 logger.info(f"Created new table with ID: {table_id}")
 
-            url = f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/records/batch_create"
+            url = f"""{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}
+                      /tables/{table_id}/records/batch_create"""
             headers = self._get_headers()
             request_bodies = read_csv(path)
 
@@ -155,18 +161,13 @@ class FeishuClient:
             print("Uploading: ", path)
             for i, request_body in enumerate(tqdm(request_bodies, ncols=70, unit='chunk')):
                 try:
-                    response = self._make_request(
+                    self._make_request(
                         "POST", 
                         url,
                         headers=headers,
                         json_data={"records": request_body}
                     )
 
-                    response_data = response.json()
-                    if response_data['code'] != 0:
-                        raise Exception('Something bad happened (Check table naming?)')
-
-                    print("......")
                     logger.debug(f"Successfully uploaded chunk {i+1}/{len(request_bodies)}")
 
                 except Exception as e:
@@ -187,7 +188,7 @@ class FeishuClient:
             except OSError as cleanup_error:
                 logger.warning(f"Failed to remove CSV file '{path}': {cleanup_error}")
 
-    def create_new_table(self, wiki_obj_token: str, file_name: str, financial_category: str):
+    def create_new_table(self, wiki_obj_token: str | None, file_name: str, financial_category: str):
         """
         在由app_token指定的位置生成一个名字为file_name的表格。
         表格字段由financial_category决定
@@ -203,8 +204,10 @@ class FeishuClient:
         异常:
             Exception: 当表格创建失败时抛出。
         """
+
         logger.info(f"Creating new table '{file_name}' for category '{financial_category}'")
 
+        _, wiki_obj_token = self._initialize_request(None, None)
         url = f"{self.BASE_URL}/bitable/v1/apps/{wiki_obj_token}/tables"
         headers = self._get_headers()
 
@@ -224,9 +227,6 @@ class FeishuClient:
             response = self._make_request("POST", url, headers=headers, json_data=request_body)
             response_data = response.json()
 
-            if response_data['code'] != 0:
-                raise Exception('Something bad happened (Check table naming?)')
-                   
             table_id = response_data['data']['table_id']
             logger.info(f"Successfully created table '{file_name}' with ID: {table_id}")
             return table_id
@@ -286,7 +286,7 @@ class FeishuClient:
             logger.error(f"Failed to get tenant access token: {e}")
             raise
 
-    def get_wiki_all_table_info(self, wiki_obj_token: str):
+    def get_wiki_all_table_info(self, wiki_obj_token: str | None):
         """
         获取wiki中所有表格信息。
 
@@ -308,13 +308,9 @@ class FeishuClient:
             response = self._make_request("GET", url, headers=headers, params={})
             table_info = response.json()
 
-            if table_info['code'] != 0:
-                raise Exception('Something bad happened')
-
-
             logger.debug(f"Found {len(table_info.get('data', {}).get('items', []))} tables")
             return table_info
- 
+
         except Exception as e:
             logger.error(f"Failed to get table info: {e}")
             raise
@@ -344,9 +340,6 @@ class FeishuClient:
             response = self._make_request("DELETE", url, headers=headers)
             result = response.json()
 
-            if response['code'] != 0:
-                raise Exception('Something bad happened')
-   
             logger.info(f"Successfully deleted table '{table_name}'")
             return result
 
@@ -356,8 +349,8 @@ class FeishuClient:
 
 
     def get_all_column_ids(self,
-                           table_name: str, 
-                           wiki_obj_token: Optional[str] = None):
+                           table_name: str,
+                           wiki_obj_token: str | None = None):
         """
         获取指定表格的所有列ID信息。
         
@@ -374,7 +367,8 @@ class FeishuClient:
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/fields"
+            url = f"""https://open.feishu.cn/open-apis/bitable
+                      /v1/apps/{wiki_obj_token}/tables/{table_id}/fields"""
 
 
             headers = self._get_headers()
@@ -386,21 +380,18 @@ class FeishuClient:
             response = self._make_request("POST", url, headers=headers, json_data=request_body)
             result = response.json()
 
-            if response['code'] != 0:
-                raise Exception('Something bad happened')
-
             logger.info(f"Successfully fetched column ids from '{table_name}'")
-    
+
         except Exception as e:
             logger.error(f"Failed to fetch table '{table_name}': {e}")
             raise
-    
+
         return result
-    
+
     def delete_records_by_id(self,
                        table_name: str,
                        ids_to_delete: list[str],
-                       wiki_obj_token: Optional[str] = None
+                       wiki_obj_token: str | None = None
                        ):
         """
         根据记录ID批量删除表格中的记录。
@@ -422,12 +413,12 @@ class FeishuClient:
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/records/batch_delete"
+            url = f"""https://open.feishu.cn/open-apis/bitable/v1/apps/
+            {wiki_obj_token}/tables/{table_id}/records/batch_delete"""
 
             headers = self._get_headers()
 
             MAX_CHUNK_SIZE = 500
-            
             already_sent = 0
 
             while already_sent < len(ids_to_delete):
@@ -437,27 +428,21 @@ class FeishuClient:
                     can_send = MAX_CHUNK_SIZE
 
                 request_body = {
-                    "records": [ids_to_delete[i] for i in range(already_sent, already_sent + can_send)] # Use max allowed for efficiency
+                    "records": ids_to_delete[already_sent:already_sent + can_send]
                 }
-                response = self._make_request("POST", url, headers=headers, json_data=request_body)
-                result = response.json()
-                if result['code'] != 0:
-                    raise Exception('Something bad happened')
-                
+                self._make_request("POST", url, headers=headers, json_data=request_body)
+
                 already_sent += can_send
 
-            print(result)
             logger.info(f"Successfully deleted records from '{table_name}'")
-
-            return result
         except Exception as e:
             logger.error(f"Failed to delete records from table '{table_name}': {e}")
             raise
 
-    def get_table_records(self, 
-                          table_name: str, 
+    def get_table_records(self,
+                          table_name: str,
                           page_size: int = 500,
-                          page_token: Optional[str] = None, 
+                          page_token: Optional[str] = None,
                           wiki_obj_token: Optional[str] = None):
         """
         获取表格记录数据，支持分页查询。
@@ -476,38 +461,39 @@ class FeishuClient:
         """
         try:
             table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
-            
-            url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{wiki_obj_token}/tables/{table_id}/records/search"
-            
+            url = f"""https://open.feishu.cn/open-apis/bitable
+                      /v1/apps/{wiki_obj_token}/tables/{table_id}/records/search"""
             headers = self._get_headers()
-            
+
             # Prepare request body (not URL params)
-            request_body = {
+            request_body: Dict[str, Any] = {
                 "page_size": page_size # Use max allowed for efficiency
             }
-            
+
             if page_token is not None:
                 request_body["page_token"] = page_token
-            
+
             # Pass request_body as JSON data, not params
-            response = self._make_request("POST", url, headers=headers, params=request_body, json_data={})
+            response = self._make_request("POST",
+                                          url,
+                                          headers=headers,
+                                          params=request_body,
+                                          json_data={})
             result = response.json()
-            if result['code'] != 0:
-                raise Exception('Something bad happened')
-            
-            logger.info(f"Successfully fetched records from '{table_name}': {len(result.get('data', {}).get('items', []))} records")
-            
+            logger.info(f"Successfully fetched records from '{table_name}': \
+                        {result['data']['items']} records")
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Failed to fetch table '{table_name}': {e}")
             raise
 
-    def get_table_records_id_at_date(self, 
+    def get_table_records_id_at_date(self,
                                     table_name: str,
                                     day: str,
-                                    time_stamp_column_name: str = None, 
-                                    wiki_obj_token: Optional[str] = None) -> list[str]:
+                                    time_stamp_column_name: str | None= None,
+                                    wiki_obj_token: str | None = None) -> list[str]:
         """
         获取指定日期（精确到日）对应的记录ID。
 
@@ -523,7 +509,7 @@ class FeishuClient:
             list[str]: 所有时间戳字段的日期等于 `day` 的记录ID列表。
         """
         try:
-            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+            _, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
             target_date = datetime.strptime(day, "%Y-%m-%d").date()
             list_of_id = []
@@ -535,14 +521,16 @@ class FeishuClient:
 
             while already_read < total_records:
                 for field in response['data']['items']:
-                    dt_obj = datetime.strptime(field["fields"][time_stamp_column_name][0]['text'], "%Y-%m-%d %H:%M:%S")
+                    dt_obj = datetime.strptime(field["fields"][time_stamp_column_name][0]['text'],
+                                               "%Y-%m-%d %H:%M:%S")
                     record_date = dt_obj.date()
 
                     if record_date > target_date:
                         # Early termination — all subsequent records will be after target_date
-                        logger.info(f"Early termination at {record_date}, no more records for {target_date}")
+                        logger.info(f"""Early termination at {record_date}
+                                    no more records for {target_date}""")
                         return list_of_id
-                    
+
                     if record_date == target_date:
                         list_of_id.append(field['record_id'])
 
@@ -556,20 +544,20 @@ class FeishuClient:
                     page_token=response['data']['page_token'],
                     wiki_obj_token=wiki_obj_token
                 )
-                
-            logger.info(f"Successfully fetched {len(list_of_id)} record(s) from '{table_name}' for date {target_date}")
+
+            logger.info(f"""Successfully fetched {len(list_of_id)} record(s) from
+                        '{table_name}' for date {target_date}""")
             return list_of_id
 
         except Exception as e:
             logger.error(f"Failed to fetch table '{table_name}': {e}")
             raise
 
-    
     def get_table_records_id_at_head_date(
         self,
         table_name: str,
-        time_stamp_column_name: str = None,
-        wiki_obj_token: Optional[str] = None
+        time_stamp_column_name: str | None = None,
+        wiki_obj_token: str | None = None
     ) -> list[str]:
         """
         获取飞书表格中最早日期(表头日期)对应的所有记录ID。
@@ -585,43 +573,35 @@ class FeishuClient:
             list[str]: 所有记录时间戳等于表头最早日期的记录ID列表。
         """
         try:
-            table_id, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+            _, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
             list_of_id = []
 
             response = self.get_table_records(table_name, wiki_obj_token=wiki_obj_token)
-            
-            # Handle empty response
-            if not response.get('data', {}).get('items'):
-                logger.info(f"No records found in table '{table_name}'")
-                return []
 
             items = response['data']['items']
-            
+
             # Get the first record's date to establish the head date
             first_record = items[0]
-            timestamp_field = first_record.get("fields", {}).get(time_stamp_column_name)
-                
+            timestamp_field = first_record["fields"][time_stamp_column_name]
+
             try:
-                first_date = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S").date()
+                first_date = datetime.strptime(timestamp_field[0]['text'],
+                                               "%Y-%m-%d %H:%M:%S").date()
             except ValueError as ve:
                 logger.error(f"Invalid datetime format in first record: {ve}")
                 return []
 
             logger.info(f"Head date determined as: {first_date}")
-            
+
             # Process first page
             for field in items:
                 timestamp_field = field['fields'][time_stamp_column_name]
-                if not timestamp_field or not timestamp_field[0].get('text'):
-                    logger.warning(f"Missing timestamp field in record {field.get('record_id', 'unknown')}")
-                    continue
-                    
+
                 try:
                     dt_obj = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S")
                     record_date = dt_obj.date()
                 except ValueError as ve:
-                    logger.warning(f"Invalid datetime format in record {field.get('record_id', 'unknown')}: {ve}")
-                    continue
+                    raise ValueError("Formatting is wrong") from ve
 
                 # If we encounter a date different from the first date, stop processing
                 if record_date != first_date:
@@ -633,34 +613,31 @@ class FeishuClient:
             # Continue with subsequent pages if needed
             already_read = len(items)
             total_records = response['data']['total']
-            
+
             while already_read < total_records:
                 page_token = response['data']['page_token']
-            
+
                 response = self.get_table_records(
-                    table_name, 
-                    page_token=page_token, 
+                    table_name,
+                    page_token=page_token,
                     wiki_obj_token=wiki_obj_token
                 )
-                    
+
                 items = response['data']['items']
                 already_read += len(items)
-                
+
                 for field in items:
                     timestamp_field = field['fields'][time_stamp_column_name]
-                    if not timestamp_field or not timestamp_field[0].get('text'):
-                        logger.warning(f"Missing timestamp field in record {field.get('record_id', 'unknown')}")
-                        continue
-                        
+
                     try:
                         dt_obj = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S")
                         record_date = dt_obj.date()
                     except ValueError as ve:
-                        logger.warning(f"Invalid datetime format in record {field.get('record_id', 'unknown')}: {ve}")
-                        continue
+                        raise ValueError("Formatting is wrong") from ve
 
                     if record_date != first_date:
-                        logger.info(f"Encountered different date {record_date}, stopping pagination")
+                        logger.info(f"""Encountered different date {record_date},
+                                    stopping pagination""")
                         return list_of_id
 
                     list_of_id.append(field['record_id'])
