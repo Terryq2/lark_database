@@ -1,6 +1,7 @@
 """"
 Helper functions
 """
+from pprint import pprint
 from datetime import datetime
 import hashlib
 import hmac
@@ -58,9 +59,9 @@ def download_urls(encrypted_urls: list[str],
 
         utf8_content = data_response.content.decode('gbk').encode('utf-8')
 
-        filename = f"""{FINANCIAL_DATA_TYPE_MAP[financial_category]}/
-                       {FINANCIAL_DATA_TYPE_MAP[financial_category]}
-                       _({search_date})_part{file_id}.csv"""
+        filename = (f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/"
+                    f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}"
+                    f"_({search_date})_part{file_id}.csv")
 
         try:
             with open(filename, "wb") as f:
@@ -125,7 +126,7 @@ def get_signature(api_name: str,
 def combine_data_files(file_paths: list[str],
                        financial_category: str,
                        search_date: str,
-                       remove_files_after_finish: bool):
+                       remove_files_after_finish: bool) -> str | None:
     """
     将多个财务数据 CSV 文件合并为一个输出文件，跳过注释行和重复的表头。
     
@@ -146,16 +147,16 @@ def combine_data_files(file_paths: list[str],
         # 输出文件将写入 商品订单数据/商品订单数据.csv
     """
     if not file_paths:
-        return
+        return None
 
-    output_path = f"""{FINANCIAL_DATA_TYPE_MAP[financial_category]}/
-                      {FINANCIAL_DATA_TYPE_MAP[financial_category]}
-                      _({search_date}).csv"""
+    output_path = (f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}/"
+                      f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}"
+                      f"_({search_date}).csv")
 
     def get_filtered_lines(path):
         with open(path, "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
-            return [line for line in lines if not line.startswith("#")]
+            return [line for line in lines if (not line.startswith("#"))]
 
     with open(output_path, "wb") as out_file:
         # Process the first file
@@ -232,7 +233,7 @@ def read_csv(path: str):
         else:
             chunk_size = total_rows - current_entry_ptr
         records = [
-            {"fields": data_dict[current_entry_ptr: current_entry_ptr + chunk_size]}
+            {"fields": data_dict[row]} for row in range(current_entry_ptr, current_entry_ptr + chunk_size)
         ]
         list_of_records.append(records)
         current_entry_ptr += max_rows_per_post
@@ -240,7 +241,7 @@ def read_csv(path: str):
     return list_of_records
 
 
-def merge_csv_files(folder_path: str) -> polars.DataFrame:
+def merge_csv_files(file_names: list[str]) -> polars.DataFrame:
     """合并指定文件夹中的所有 CSV 文件到一个 Polars DataFrame，并清空原文件夹。
 
     遍历文件夹中的所有 CSV 文件，将它们读取为 Polars DataFrame 并进行垂直拼接（纵向合并）。
@@ -270,16 +271,14 @@ def merge_csv_files(folder_path: str) -> polars.DataFrame:
         >>> # 原文件夹 `/data` 将被清空
     """
     dfs = []
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".csv"):
-            filepath = os.path.join(folder_path, filename)
-            df = polars.read_csv(filepath, truncate_ragged_lines=True, infer_schema=False)
-            dfs.append(df)
-    for filename in os.listdir(folder_path):
-        os.remove(os.path.join(folder_path, filename))
+    for filename in file_names:
+        df = polars.read_csv(filename, truncate_ragged_lines=True, infer_schema=False)
+        dfs.append(df)
+    for filename in file_names:
+        os.remove(filename)
     return polars.concat(dfs, how="vertical")
 
-def order_by_time(path: str, timestamp_col: int = 0):
+def order_by_time(path: str, financial_category: str, timestamp_col: int = 0):
     """
     读取 CSV 文件，按时间列排序并覆盖原文件。
 
@@ -310,15 +309,30 @@ def order_by_time(path: str, timestamp_col: int = 0):
     """
 
     df = polars.read_csv(path, truncate_ragged_lines=True, infer_schema=False)
-    df = df.with_columns([
-        polars.col(df.columns[timestamp_col]).str.strptime(polars.Datetime,
-                                                           "%Y-%m-%d %H:%M:%S", 
-                                                           strict=False)
-    ])
+    if financial_category == 'C07':
+        df = df.with_columns([
+            polars.col(df.columns[timestamp_col]).str.strptime(polars.Datetime,
+                                                               "%Y-%m-%d", 
+                                                               strict=False)
+        ])
+    else:
+        df = df.with_columns([
+            polars.col(df.columns[timestamp_col]).str.strptime(polars.Datetime,
+                                                            "%Y-%m-%d %H:%M:%S", 
+                                                            strict=False)
+        ])
+        
+    
     df = df.sort(df.columns[timestamp_col], descending = False)
-    df = df.with_columns([
-        polars.col(df.columns[timestamp_col]).dt.strftime("%Y-%m-%d %H:%M:%S")
-    ])
+    if financial_category == 'C07':
+        df = df.with_columns([
+            polars.col(df.columns[timestamp_col]).dt.strftime("%Y-%m-%d")
+        ])
+    else:
+        df = df.with_columns([
+            polars.col(df.columns[timestamp_col]).dt.strftime("%Y-%m-%d %H:%M:%S")
+        ])
+    
     os.remove(path)
     df.write_csv(path, quote_style="always")
 
@@ -397,3 +411,28 @@ def find_matching_table(json_data: dict[Any, Any] , table_name: str | None) -> s
                 return table.get("table_id")
     except KeyError as e:
         raise KeyError("Json data is malformed or does not contain a data field") from e
+
+def make_request(
+    method: str,
+    url: str,
+    headers: dict[str, str] | None = None,
+    json_data: dict[Any, Any] | None = None,
+    params: dict[Any, Any] | None = None,
+    timeout: float = 30.0
+) -> httpx.Response:
+    """统一的HTTP请求方法"""
+    with httpx.Client() as client:
+        response = client.request(
+            method=method,
+            url=url,
+            headers=headers,
+            json=json_data,
+            params=params,
+            timeout=timeout
+        )
+        pprint(json_data)
+        print(response.content)
+        # if response.json()['code'] != 0:
+        #     raise Exception("Teststs")
+        response.raise_for_status()
+    return response

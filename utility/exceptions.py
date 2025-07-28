@@ -48,3 +48,19 @@ class DataFetchException(Exception):
     def __init__(self, message="获取数据失败"):
         self.message = message
         super().__init__(message)
+
+class DataProcessException(Exception):
+    """表示处理数据时发生错误的异常。
+
+    当程序在处理数据过程中遇到错误时抛出此异常。
+
+    示例：
+        在请求接口失败或数据解析错误时，可以抛出此异常。
+
+    属性：
+        message (str): 异常提示信息，默认为 "获取数据失败"。
+    """
+
+    def __init__(self, message="处理数据失败"):
+        self.message = message
+        super().__init__(message)

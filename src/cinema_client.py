@@ -1,20 +1,24 @@
-"""This is a class that helps fetching data from the yuekeyun website"""
+"""
+This is a class that helps the fetching of data from the yuekeyun website
+"""
 import logging
 import os
 import datetime
 
 from utility import exceptions
 from utility import FINANCIAL_DATA_TYPE_MAP
+
 from utility.helpers import (
     get_signature,
     download_urls,
-    query_data,
     combine_data_files,
     order_by_time,
-    get_timestamp
+    get_timestamp,
+    make_request
 )
 from utility import sha1prng
-import src.config as config
+from src import config
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,10 +59,10 @@ class YKYRequester:
         """
         if not in_config:
             raise ValueError("Configuration manager cannot be None")
-            
+
         self.config = in_config
         self.base_url = self.BASE_URL
-        
+
         logger.info("YKYRequester initialized successfully")
 
     def _validate_inputs(self, financial_category: str, timespan: str, search_date: str) -> None:
@@ -80,12 +84,18 @@ class YKYRequester:
         if timespan not in self.VALID_TIMESPANS:
             logger.error(f"Invalid timespan: {timespan}. Must be one of {self.VALID_TIMESPANS}")
             raise exceptions.InvalidTimespanException()
-        
-        datetime.datetime.strptime(search_date, "%Y-%m-%d")
 
-        logger.debug(f"Input validation passed for category: {financial_category}, timespan: {timespan}")
+        if timespan == 'month':
+            datetime.datetime.strptime(search_date, "%Y-%m")
+        if timespan == 'day':
+            datetime.datetime.strptime(search_date, "%Y-%m-%d")
 
-    def _build_query_parameters(self, financial_category: str, timespan: str, search_date: str) -> dict[str, str]:
+        logger.debug(f"Input validation passed for {financial_category}, and {timespan}")
+
+    def _build_query_parameters(self,
+                                financial_category: str,
+                                timespan: str,
+                                search_date: str) -> dict[str, str]:
         """构建API查询参数。
 
         Args:
@@ -105,7 +115,7 @@ class YKYRequester:
             "searchDateType": timespan,
             "searchDate": search_date
         }
-        
+
         logger.debug(f"Built query parameters for {financial_category} on {search_date}")
         return query_parameters
 
@@ -131,7 +141,7 @@ class YKYRequester:
             logger.error(f"Failed to generate signature: {e}")
             raise
 
-    def _fetch_download_urls(self, query_parameters: dict[str, str]) -> dict[str]:
+    def _fetch_download_urls(self, query_parameters: dict[str, str]) -> list[str]:
         """获取数据下载URL列表。
 
         Args:
@@ -144,35 +154,32 @@ class YKYRequester:
             Exception: 当API请求失败时抛出。
         """
         try:
-            response = query_data(self.API_NAME, query_parameters, self.config.get("APP_KEY"))
-            
-            if not response or response.status_code != 200:
-                raise Exception(f"API request failed with status: {response.status_code if response else 'No response'}")
+            url = ("https://gw.open.yuekeyun.com/openapi/"
+                   "param2/1/alibaba.dme.lark/dme.lark.data.finance.getFinancialData/"
+                  f"{self.config.get("APP_KEY")}")
+
+            response = make_request('GET', url, params=query_parameters)
 
             response_data = response.json()
-            
-            if 'data' not in response_data or 'bizData' not in response_data['data']:
-                raise Exception("Invalid API response structure")
-
             download_url_list = response_data['data']['bizData']['downloadUrlList']
-            
+
             if not download_url_list:
                 logger.warning("No download URLs found in API response")
                 return []
 
             logger.info(f"Retrieved {len(download_url_list)} download URLs")
             return download_url_list
-            
+
         except Exception as e:
             logger.error(f"Failed to fetch download URLs: {e}")
             raise
 
     def _process_downloaded_data(
-        self, 
-        download_url_list: list[str], 
-        financial_category: str, 
+        self,
+        download_url_list: list[str],
+        financial_category: str,
         search_date: str
-    ) -> str:
+    ) -> str | None:
         """处理下载的数据文件。
 
         Args:
@@ -186,13 +193,18 @@ class YKYRequester:
         Raises:
             Exception: 当数据处理失败时抛出。
         """
+        file_name_stack = []
         try:
             decrypter = sha1prng.Decrypter(self.config.get("LEASE_CODE"))
             logger.debug("Decrypter initialized")
 
             logger.info(f"Starting download of {len(download_url_list)} files")
-            file_name_stack = download_urls(download_url_list, financial_category, decrypter, search_date)
-            
+
+            file_name_stack = download_urls(download_url_list,
+                                            financial_category,
+                                            decrypter,
+                                            search_date)
+
             if not file_name_stack:
                 logger.warning("No files were downloaded successfully")
                 return ""
@@ -204,14 +216,16 @@ class YKYRequester:
 
             logger.info("Ordering data by timestamp")
             timestamp_column = self.config.get_timestamp_column(financial_category)
-            order_by_time(output_csv, timestamp_column)
-            
+            if output_csv is None:
+                raise exceptions.DataProcessException("Data file not generated")
+            order_by_time(output_csv, financial_category, timestamp_column)
+
             logger.info(f"Data processing completed successfully: {output_csv}")
             return output_csv
-            
+
         except Exception as e:
             logger.error(f"Failed to process downloaded data: {e}")
-            self._cleanup_on_error(file_name_stack if 'file_name_stack' in locals() else [])
+            self._cleanup_on_error(file_name_stack)
             raise
 
     def _cleanup_on_error(self, file_list: list[str]) -> None:
@@ -222,18 +236,18 @@ class YKYRequester:
         """
         if not file_list:
             return
-            
+
         logger.info(f"Cleaning up {len(file_list)} files due to error")
-        
+
         for file_path in file_list:
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     logger.debug(f"Removed file: {file_path}")
-            except Exception as cleanup_error:
+            except OSError as cleanup_error:
                 logger.warning(f"Failed to cleanup file {file_path}: {cleanup_error}")
 
-    def get_financial_data(self, entries: tuple[str, str, str]) -> str:
+    def get_financial_data(self, entries: tuple[str, str, str]) -> str | None:
         """用于获取财政数据。
 
         从悦刻云API获取指定类型和日期的财务数据，包括下载、解密、合并和排序等完整流程。
@@ -264,34 +278,28 @@ class YKYRequester:
             >>> print(f"Data saved to: {csv_file}")
         """
         financial_category, timespan, search_date = entries
-        
+
         logger.info(f"Starting financial data retrieval: category={financial_category}, "
                    f"timespan={timespan}, date={search_date}")
 
-        try:
-            self._validate_inputs(financial_category, timespan, search_date)
+        self._validate_inputs(financial_category, timespan, search_date)
 
-            query_parameters = self._build_query_parameters(financial_category, timespan, search_date)
+        query_parameters = self._build_query_parameters(financial_category,
+                                                        timespan,
+                                                        search_date)
 
-            aop_signature = self._generate_signature(query_parameters)
-            query_parameters["_aop_signature"] = aop_signature
+        aop_signature = self._generate_signature(query_parameters)
+        query_parameters["_aop_signature"] = aop_signature
 
-            download_url_list = self._fetch_download_urls(query_parameters)
-            
-            if not download_url_list:
-                logger.warning("No download URLs available, returning empty result")
-                return ""
-            
-            output_csv = self._process_downloaded_data(download_url_list, financial_category, search_date)
-            
-            logger.info(f"Financial data retrieval completed successfully: {output_csv}")
-            return output_csv
+        download_url_list = self._fetch_download_urls(query_parameters)
 
-        except (exceptions.InvalidFinancialCategoryException, exceptions.InvalidTimespanException):
-            raise
-        except Exception as e:
-            logger.error(f"Financial data retrieval failed: {e}")
-            raise Exception(f"Failed to get financial data for {financial_category} on {search_date}: {e}") from e
-        
-    
-    
+        if not download_url_list:
+            logger.warning("No download URLs available, returning empty result")
+            return ""
+
+        output_csv = self._process_downloaded_data(download_url_list,
+                                                    financial_category,
+                                                    search_date)
+
+        logger.info(f"Financial data retrieval completed successfully: {output_csv}")
+        return output_csv
