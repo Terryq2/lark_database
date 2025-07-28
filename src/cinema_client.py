@@ -1,4 +1,6 @@
-"""This is a class that helps fetching data from the yuekeyun website"""
+"""
+This is a class that helps the fetching of data from the yuekeyun website
+"""
 import logging
 import os
 import datetime
@@ -83,7 +85,10 @@ class YKYRequester:
             logger.error(f"Invalid timespan: {timespan}. Must be one of {self.VALID_TIMESPANS}")
             raise exceptions.InvalidTimespanException()
 
-        datetime.datetime.strptime(search_date, "%Y-%m-%d")
+        if timespan == 'month':
+            datetime.datetime.strptime(search_date, "%Y-%m")
+        if timespan == 'day':
+            datetime.datetime.strptime(search_date, "%Y-%m-%d")
 
         logger.debug(f"Input validation passed for {financial_category}, and {timespan}")
 
@@ -213,7 +218,7 @@ class YKYRequester:
             timestamp_column = self.config.get_timestamp_column(financial_category)
             if output_csv is None:
                 raise exceptions.DataProcessException("Data file not generated")
-            order_by_time(output_csv, timestamp_column)
+            order_by_time(output_csv, financial_category, timestamp_column)
 
             logger.info(f"Data processing completed successfully: {output_csv}")
             return output_csv

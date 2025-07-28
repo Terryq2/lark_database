@@ -79,23 +79,23 @@ class ConfigManager:
             "APP_KEY", "SECRET_KEY", "LEASE_CODE", "CINEMA_LINK_ID",
             "CHANNEL_CODE", "FEISHU_APP_KEY", "FEISHU_APP_SECRET", "WIKI_APP_TOKEN"
         ]
-        
+
         missing_keys = [key for key in required_keys if key not in keys]
         if missing_keys:
             raise KeyError(f"缺少必需的配置键: {', '.join(missing_keys)}")
-        
+
         return Config(
             BASE_URL="https://gw.open.yuekeyun.com/openapi/param2/1/alibaba.dme.lark",
-            APP_KEY=keys["APP_KEY"],
-            SECRET_KEY=keys["SECRET_KEY"],
-            LEASE_CODE=keys["LEASE_CODE"],
-            CINEMA_LINK_ID=keys["CINEMA_LINK_ID"],
-            CHANNEL_CODE=keys["CHANNEL_CODE"],
-            FEISHU_APP_KEY=keys["FEISHU_APP_KEY"],
-            FEISHU_APP_SECRET=keys["FEISHU_APP_SECRET"],
-            WIKI_APP_TOKEN=keys["WIKI_APP_TOKEN"]
+            APP_KEY=keys["APP_KEY"], # type: ignore
+            SECRET_KEY=keys["SECRET_KEY"], # type: ignore
+            LEASE_CODE=keys["LEASE_CODE"], # type: ignore
+            CINEMA_LINK_ID=keys["CINEMA_LINK_ID"], # type: ignore
+            CHANNEL_CODE=keys["CHANNEL_CODE"], # type: ignore
+            FEISHU_APP_KEY=keys["FEISHU_APP_KEY"], # type: ignore
+            FEISHU_APP_SECRET=keys["FEISHU_APP_SECRET"], # type: ignore
+            WIKI_APP_TOKEN=keys["WIKI_APP_TOKEN"] # type: ignore
         )
-    
+
     def get(self, key: str) -> str:
         """
         根据键名获取配置值。
@@ -107,7 +107,7 @@ class ConfigManager:
             str: 对应的配置值。
         """
         return getattr(self.config, key)
-    
+
     def get_columns(self, category: str) -> List[str]:
         """
         获取指定类别下的字段名列表。
@@ -169,14 +169,14 @@ class FinancialQueries:
         """
         if time_span not in self.VALID_TIME_SPANS:
             raise ValueError(f"Invalid time_span. Must be one of: {self.VALID_TIME_SPANS}")
-        
+
         if not self._is_real_and_valid_date(time_span, query_date):
             raise ValueError(f"Invalid date format for time_span '{time_span}': {query_date}")
 
         self.time_spans.append(time_span)
         self.query_dates.append(query_date)
         self.size += 1
-            
+
     def _is_real_and_valid_date(self, time_span: str, input_date: str) -> bool:
         """
         检查输入日期是否符合指定时间跨度的格式。

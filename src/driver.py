@@ -144,7 +144,7 @@ class DataSyncClient:
 
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            df = merge_csv_files(category_folder)
+            df = merge_csv_files(output_csv_paths)
             df.write_csv(str(output_path))
 
             financial_category = queries.category
@@ -284,7 +284,7 @@ class DataSyncClient:
     ) -> None:
         """同步最近N天的财务数据，并清除飞书表中已存在的相应记录。
 
-        该方法先删除飞书表格中早于指定日期（例如14天前）的旧数据，再上传今天的数据。
+        该方法先删除飞书表格头部的（例如14天前）旧数据，再上传今天的数据。
 
         Args:
             financial_category (str): 财务数据类别。
@@ -318,9 +318,18 @@ class DataSyncClient:
             self.lark_client.delete_records_by_id(table_name, list_of_ids, wiki_obj_token)
             query_data_today = FinancialQueries(financial_category,
                                                 'day',
-                                                date.today().strftime("%Y-%m-%d"))
+                                                (date.today()-timedelta(days=1)).strftime("%Y-%m-%d"))
             self.upload_data(query_data_today, table_name)
 
         except Exception as e:
             logger.error(f"Failed to sync most recent data: {e}")
             raise
+
+    def sync_all_today(self):
+        today_in_string = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        self.upload_data(FinancialQueries('C02', 'day', today_in_string), "卖品销售明细")
+        self.upload_data(FinancialQueries('C04', 'day', today_in_string), "会员卡充值明细")
+        self.upload_data(FinancialQueries('C05', 'day', today_in_string), "会员卡消费明细")
+        self.upload_data(FinancialQueries('C07', 'day', today_in_string), "货品进销存汇")
+        self.sync_most_recent_data('C01', "影票销售明细")
