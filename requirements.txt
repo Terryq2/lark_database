@@ -4,3 +4,4 @@ datetime
 dotenv
 pycryptodome
 tqdm
+apscheduler
