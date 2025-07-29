@@ -52,7 +52,7 @@ def download_urls(encrypted_urls: list[str],
     os.makedirs(f"{FINANCIAL_DATA_TYPE_MAP[financial_category]}", exist_ok = True)
     for secret_url in tqdm(encrypted_urls, ncols=70, unit="url"):
         try:
-            data_response = httpx.get(decrypter.decode(secret_url))
+            data_response = httpx.get(decrypter.decode(secret_url), timeout=60.0)
         except httpx.HTTPError as htttp_error:
             clear_files(file_path_stack)
             raise exceptions.DataFetchException() from htttp_error

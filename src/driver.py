@@ -161,6 +161,7 @@ class DataSyncClient:
             logger.error(f"Failed to sync financial data: {e}")
             raise
 
+
     def _upload_current_year_data(
         self,
         financial_category: str,
@@ -325,11 +326,39 @@ class DataSyncClient:
             logger.error(f"Failed to sync most recent data: {e}")
             raise
 
-    def sync_all_today(self):
-        today_in_string = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    def sync_all_upto_today(self):
+        """将特定财务代码的当前年份数据同步至今天。
 
-        self.upload_data(FinancialQueries('C02', 'day', today_in_string), "卖品销售明细")
-        self.upload_data(FinancialQueries('C04', 'day', today_in_string), "会员卡充值明细")
-        self.upload_data(FinancialQueries('C05', 'day', today_in_string), "会员卡消费明细")
-        self.upload_data(FinancialQueries('C07', 'day', today_in_string), "货品进销存汇")
-        self.sync_most_recent_data('C01', "影票销售明细")
+        该方法为财务代码 'C02'、'C04'、'C05' 和 'C07' 上传当前年份的数据，
+        使用其各自的配置名称。
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        self._upload_current_year_data('C02', self.config.get_name('C02'))
+        self._upload_current_year_data('C04', self.config.get_name('C04'))
+        self._upload_current_year_data('C05', self.config.get_name('C05'))
+        self._upload_current_year_data('C07', self.config.get_name('C07'))
+        
+    def sync_all_yesterday(self):
+        """将特定财务代码的前一天数据进行同步。
+
+        该方法为财务代码 'C02'、'C04'、'C05' 和 'C07' 上传前一天的数据，
+        使用其各自的配置名称。此外，还会同步财务代码 'C01' 的最新数据。
+        前一天的日期以 'YYYY-MM-DD' 格式的字符串表示。
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        self.upload_data(FinancialQueries('C02', 'day', yesterday), self.config.get_name('C02'))
+        self.upload_data(FinancialQueries('C04', 'day', yesterday), self.config.get_name('C04'))
+        self.upload_data(FinancialQueries('C05', 'day', yesterday), self.config.get_name('C05'))
+        self.upload_data(FinancialQueries('C07', 'day', yesterday), self.config.get_name('C07'))

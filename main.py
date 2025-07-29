@@ -1,14 +1,22 @@
-from src.driver import DataSyncClient
 from apscheduler.schedulers.blocking import BlockingScheduler
+from src.driver import DataSyncClient
 
 
-    
-def today():
+def job_for_cinema_tickets():
     syncer = DataSyncClient(".env", "config.json")
-    syncer.sync_all_today()
+    syncer.sync_most_recent_data('C01', syncer.config.get_name('C01'))
+
+def job_for_others():
+    syncer = DataSyncClient(".env", "config.json")
+    syncer.sync_all_yesterday()
 
 if __name__ == "__main__":
-    scheduler = BlockingScheduler()
-    scheduler.add_job(today, 'cron', hour=20, minute=48)
-    scheduler.start()
+    syncer = DataSyncClient(".env", "config.json")
+    syncer.lark_client._get_user_ids("总部")
+
+
+    # scheduler = BlockingScheduler()
+    # scheduler.add_job(job_for_cinema_tickets, 'cron', hour=8, minute=0)
+    # scheduler.add_job(job_for_others, 'cron', hour=8, minute=30)
+    # scheduler.start()
 
