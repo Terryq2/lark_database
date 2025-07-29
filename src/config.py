@@ -119,6 +119,12 @@ class ConfigManager:
             List[str]: 字段名组成的列表。
         """
         return self.schemas[category]["columns"]
+    
+    def get_name(self, category: str) -> str:
+        """
+        返回财务类型的名字，例如C01 对应 影票销售明细。
+        """
+        return self.schemas[category]['name']
 
     def get_timestamp_column(self, category: str) -> int:
         """
