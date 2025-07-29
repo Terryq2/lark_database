@@ -364,6 +364,48 @@ class FeishuClient:
 
         return result
 
+    def _get_all_chat_groups(self):
+        url = "https://open.feishu.cn/open-apis/im/v1/chats"
+
+        headers = self._get_headers()
+
+        params = {
+            "user_id_type": "user_id"
+        }
+
+        response = make_request("GET", url, headers, json_data={}, params=params)
+        return response.json()
+
+    def _delete_chat_groups_by_id(self,
+                                 id: str):
+        url = f"https://open.feishu.cn/open-apis/im/v1/chats/{id}"
+
+        headers = self._get_headers()
+
+        response = make_request("DELETE", url, headers)
+        return response.json()
+
+    def send_message_to_chat_group(self,
+                           msg: str,
+                           id: str):
+        url = f"https://open.feishu.cn/open-apis/im/v1/messages"
+        
+        headers = self._get_headers()
+
+        params = {
+            "receive_id_type": "chat_id"
+        }
+
+        request_body = {
+            "receive_id": id,
+            "msg_type": "text",
+            "content": msg
+        }
+
+        response = make_request("POST", url, headers, json_data=request_body, params=params)
+        return response.json()
+
+
     def delete_records_by_id(self,
                        table_name: str,
                        ids_to_delete: list[str],
