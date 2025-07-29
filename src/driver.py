@@ -202,7 +202,7 @@ class DataSyncClient:
                 "month", 
                 f"{current_time.year}-01"  # Start from January
             )
-            
+
             # Add remaining months
             for month in range(2, current_time.month):
                 queries.add_new_query("month", f"{current_time.year}-{month:02d}")
@@ -356,10 +356,9 @@ class DataSyncClient:
         Returns:
             None
         """
-        today_in_string = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-        self.upload_data(FinancialQueries('C02', 'day', today_in_string), self.config.get_name('C02'))
-        self.upload_data(FinancialQueries('C04', 'day', today_in_string), self.config.get_name('C04'))
-        self.upload_data(FinancialQueries('C05', 'day', today_in_string), self.config.get_name('C05'))
-        self.upload_data(FinancialQueries('C07', 'day', today_in_string), self.config.get_name('C07'))
-        self.sync_most_recent_data('C01', self.config.get_name('C01'))
+        self.upload_data(FinancialQueries('C02', 'day', yesterday), self.config.get_name('C02'))
+        self.upload_data(FinancialQueries('C04', 'day', yesterday), self.config.get_name('C04'))
+        self.upload_data(FinancialQueries('C05', 'day', yesterday), self.config.get_name('C05'))
+        self.upload_data(FinancialQueries('C07', 'day', yesterday), self.config.get_name('C07'))
