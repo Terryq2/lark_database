@@ -52,6 +52,7 @@ def _message_chat():
         syncer.config.get("CHAT_ID")
     )
 
+
 if __name__ == "__main__":
     try:
         _message_chat()
@@ -61,10 +62,19 @@ if __name__ == "__main__":
         scheduler.add_job(
             _message_chat,
             'cron',  # Runs at :00 and :30 every hour
-            hour='0-23/4'     # Runs every hour (0-23)
+            hour='0-23/4'     # Runs every 4 hours (0-23)
         )
         scheduler.start()
     except Exception as e:
+        s = DataSyncClient(".env", "config.json")
+
+
+        ct = datetime.now()
+        t = ct.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+        m = json.dumps({
+            "text": ('<at user_id="all"></at> ' f'{t}' f' <b>FATAL ERROR</b>')
+        })
+        s.lark_client.send_message_to_chat_group(m, s.config.get("CHAT_ID"))
         os._exit(1)
         
 
