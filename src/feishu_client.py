@@ -365,6 +365,25 @@ class FeishuClient:
         return result
 
     def _get_all_chat_groups(self):
+        """获取租户下所有的群组列表。
+
+        调用飞书开放平台接口获取当前租户下的所有群组信息。
+
+        Returns:
+            dict: 飞书API返回的群组列表数据，格式为:
+                {
+                    "data": {
+                        "items": [
+                            {"chat_id": "oc_xxx", "name": "群组1", ...},
+                            ...
+                        ]
+                    },
+                    ...
+                }
+
+        Raises:
+            RequestException: 当API请求失败时抛出
+        """
         url = "https://open.feishu.cn/open-apis/im/v1/chats"
 
         headers = self._get_headers()
@@ -377,8 +396,25 @@ class FeishuClient:
         return response.json()
 
     def _delete_chat_groups_by_id(self,
-                                 id: str):
-        url = f"https://open.feishu.cn/open-apis/im/v1/chats/{id}"
+                                 chat_id: str):
+        """根据群组ID删除指定的群组。
+
+        Args:
+            id (str): 要删除的群组ID，格式如"oc_xxx"
+
+        Returns:
+            dict: 飞书API返回的删除结果，格式为:
+                {
+                    "code": 0,
+                    "msg": "success",
+                    "data": {}
+                }
+
+        Raises:
+            RequestException: 当API请求失败时抛出
+            ValueError: 当群组ID无效时抛出
+        """
+        url = f"https://open.feishu.cn/open-apis/im/v1/chats/{chat_id}"
 
         headers = self._get_headers()
 
@@ -387,7 +423,27 @@ class FeishuClient:
 
     def send_message_to_chat_group(self,
                            msg: str,
-                           id: str):
+                           chat_id: str):
+        """向指定的飞书群组发送文本消息。
+
+        Args:
+            msg (str): 要发送的文本消息内容
+            chat_id (str): 目标群组ID，格式如"oc_xxx"
+
+        Returns:
+            dict: 飞书API返回的发送结果，格式为:
+                {
+                    "code": 0,
+                    "msg": "success",
+                    "data": {
+                        "message_id": "om_xxx"
+                    }
+                }
+
+        Raises:
+            RequestException: 当API请求失败时抛出
+            ValueError: 当消息内容为空或群组ID无效时抛出
+        """ 
         url = f"https://open.feishu.cn/open-apis/im/v1/messages"
         
         headers = self._get_headers()
@@ -397,7 +453,7 @@ class FeishuClient:
         }
 
         request_body = {
-            "receive_id": id,
+            "receive_id": chat_id,
             "msg_type": "text",
             "content": msg
         }
