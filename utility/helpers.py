@@ -1,7 +1,6 @@
 """"
 Helper functions
 """
-from pprint import pprint
 from datetime import datetime
 import hashlib
 import hmac
@@ -430,9 +429,6 @@ def make_request(
             params=params,
             timeout=timeout
         )
-        pprint(json_data)
-        print(response.content)
-        # if response.json()['code'] != 0:
-        #     raise Exception("Teststs")
+        # print(response.content)
         response.raise_for_status()
     return response

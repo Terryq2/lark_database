@@ -150,7 +150,7 @@ class FinancialQueries:
         "day": "%Y-%m-%d"
     }
 
-    def __init__(self, financial_category: str, time_range: str, query_date: str):
+    def __init__(self, financial_category: str, time_span: str | None = None, query_date: str | None = None):
         """
         初始化一个财务查询任务。
 
@@ -160,9 +160,24 @@ class FinancialQueries:
             query_date (str): 查询的日期字符串，格式取决于时间跨度。
         """
         self.category = financial_category
-        self.time_spans = [time_range]
-        self.query_dates = [query_date]
-        self.size = 1
+
+        if time_span:
+            self.time_spans = [time_span]
+        else:
+            self.time_spans = []
+
+        if query_date:
+            self.query_dates = [query_date]
+        else:
+            self.query_dates = []
+
+
+        if time_span is None and query_date is None:
+            self.size = 0
+        elif time_span is not None and query_date is not None:
+            self.size = 1
+        else:
+            raise Exception('Either both is none or both is not none')
 
     def add_new_query(self, time_span: str, query_date: str):
         """

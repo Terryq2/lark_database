@@ -17,7 +17,7 @@ from src.cinema_client import YKYRequester
 from src.feishu_client import FeishuClient
 from utility.helpers import merge_csv_files, FINANCIAL_DATA_TYPE_MAP
 
-
+QUARTERS = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -161,26 +161,13 @@ class DataSyncClient:
             logger.error(f"Failed to sync financial data: {e}")
             raise
 
-
-    def _upload_current_year_data(
-        self,
-        financial_category: str,
-        table_name: str,
-        wiki_obj_token: Optional[str] = None
-    ) -> None:
-        """同步当前年度的财务数据。
-
-        该方法将从年初至今的每月数据及本月每日数据合并后上传至飞书指定表格。
-
-        Args:
-            financial_category (str): 财务数据类别。
-            table_name (str): 飞书目标数据表名称。
-            wiki_obj_token (Optional[str]): 飞书wiki对象令牌，如果为None则自动获取。
-
-        Raises:
-            ValueError: 当参数无效时抛出。
-            Exception: 任意步骤失败时抛出。
-        """
+    
+    def _upload_current_year_data_not_by_quarter(
+            self,
+            financial_category: str,
+            table_name: str,
+            wiki_obj_token: Optional[str] = None
+        ):
         if not financial_category.strip():
             raise ValueError("Financial category cannot be empty")
         if not table_name.strip():
@@ -197,14 +184,10 @@ class DataSyncClient:
             current_time = datetime.now()
 
             # Create queries for all months from January to current month (exclusive)
-            queries = FinancialQueries(
-                financial_category,
-                "month", 
-                f"{current_time.year}-01"  # Start from January
-            )
+            queries = FinancialQueries(financial_category)
 
             # Add remaining months
-            for month in range(2, current_time.month):
+            for month in range(1, current_time.month):
                 queries.add_new_query("month", f"{current_time.year}-{month:02d}")
 
             # Add days of current month
@@ -217,38 +200,19 @@ class DataSyncClient:
         except Exception as e:
             logger.error(f"Failed to sync current year data: {e}")
             raise
-
-    def _upload_most_recent_data(
-        self,
-        financial_category: str,
-        table_name: str,
-        looking_back: int = 14,
-        wiki_obj_token: Optional[str] = None
-    ) -> None:
-        """同步最近指定天数的财务数据。
-
-        从当前日期开始回溯指定天数（默认14天），逐日获取数据并上传飞书。
-
-        Args:
-            financial_category (str): 财务数据类别。
-            table_name (str): 飞书目标数据表名称。
-            looking_back (int): 回溯天数，默认为14天。
-            wiki_obj_token (Optional[str]): 飞书wiki对象令牌，如果为None则自动获取。
-
-        Raises:
-            ValueError: 当输入参数无效时抛出。
-            Exception: 任意步骤失败时抛出。
-        
-        """
+    
+    def _upload_current_year_data_by_quarter(
+            self,
+            financial_category: str,
+            table_name: str,
+            wiki_obj_token: Optional[str] = None
+        ):
         if not financial_category.strip():
             raise ValueError("Financial category cannot be empty")
         if not table_name.strip():
             raise ValueError("Table name cannot be empty")
-        if looking_back <= 0:
-            raise ValueError("Looking back days must be positive")
 
-        logger.info(f"""Uploading most recent {looking_back}
-                    days for category '{financial_category}'""")
+        logger.info(f"Starting sync of current year data for category '{financial_category}'")
 
         try:
             if wiki_obj_token is None:
@@ -257,24 +221,57 @@ class DataSyncClient:
                 )
 
             current_time = datetime.now()
-            start_date = current_time - timedelta(days=looking_back)
+            current_year = current_time.year
+            current_month = current_time.month
+            current_quarter = (current_month - 1) // 3 + 1
+                
+            for quarter in range(1, current_quarter):
+                months_in_quarter = QUARTERS[quarter - 1]
+                query = FinancialQueries(financial_category)
+                for month in months_in_quarter:
+                    query.add_new_query('month', f'{current_year}-{month:02d}')
+                self.upload_data(query, f'{table_name} Q{quarter} {current_year}')
+            
+            months_in_quarter = QUARTERS[current_quarter]
+            query = FinancialQueries(financial_category)
+            for month in range(months_in_quarter[0], current_month):
+                query.add_new_query('month', f'{current_year}-{month:02d}')
 
-            queries = FinancialQueries(
-                financial_category,
-                "day", 
-                start_date.strftime("%Y-%m-%d")
-            )
-
-            # Add remaining days (note: corrected the range logic)
-            for i in range(looking_back - 1, 0, -1):
-                current_date = (current_time - timedelta(days=i)).strftime("%Y-%m-%d")
-                queries.add_new_query('day', current_date)
-
-            self.upload_data(queries, table_name, wiki_obj_token)
+            for day in range(1, current_time.day):
+                query.add_new_query('day', f'{current_year}-{current_month:02d}-{day:02d}')
+            
+            self.upload_data(query, f'{table_name} Q{current_quarter} {current_year}')
+            
+                
 
         except Exception as e:
-            logger.error(f"Failed to upload most recent data: {e}")
+            logger.error(f"Failed to sync current year data: {e}")
             raise
+
+    def _upload_current_year_data(
+        self,
+        financial_category: str,
+        table_name: str,
+        wiki_obj_token: Optional[str] = None,
+        upload_by_quarter: bool = False
+    ) -> None:
+        """同步当前年度的财务数据。
+
+        该方法将从年初至今的每月数据及本月每日数据合并后上传至飞书指定表格。
+
+        Args:
+            financial_category (str): 财务数据类别。
+            table_name (str): 飞书目标数据表名称。
+            wiki_obj_token (Optional[str]): 飞书wiki对象令牌，如果为None则自动获取。
+
+        Raises:
+            ValueError: 当参数无效时抛出。
+            Exception: 任意步骤失败时抛出。
+        """
+        if upload_by_quarter:
+            self._upload_current_year_data_by_quarter(financial_category, table_name)
+        else:
+            self._upload_current_year_data_not_by_quarter(financial_category, table_name)
 
     def sync_most_recent_data(
             self,
@@ -334,14 +331,14 @@ class DataSyncClient:
 
         Args:
             None
-
+            
         Returns:
             None
         """
         self._upload_current_year_data('C02', self.config.get_name('C02'))
         self._upload_current_year_data('C04', self.config.get_name('C04'))
         self._upload_current_year_data('C05', self.config.get_name('C05'))
-        self._upload_current_year_data('C07', self.config.get_name('C07'))
+        self._upload_current_year_data('C07', self.config.get_name('C07'), upload_by_quarter=True)
         
     def sync_all_yesterday(self):
         """将特定财务代码的前一天数据进行同步。
@@ -358,7 +355,11 @@ class DataSyncClient:
         """
         yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
+        current_time = datetime.now()
+        current_year = current_time.year
+        current_quarter = (current_time.month - 1) // 3 + 1
+
         self.upload_data(FinancialQueries('C02', 'day', yesterday), self.config.get_name('C02'))
         self.upload_data(FinancialQueries('C04', 'day', yesterday), self.config.get_name('C04'))
         self.upload_data(FinancialQueries('C05', 'day', yesterday), self.config.get_name('C05'))
-        self.upload_data(FinancialQueries('C07', 'day', yesterday), self.config.get_name('C07'))
+        self.upload_data(FinancialQueries('C07', 'day', yesterday), f'{self.config.get_name('C07')} Q{current_quarter} {current_year}')
