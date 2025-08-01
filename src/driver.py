@@ -161,6 +161,63 @@ class DataSyncClient:
             logger.error(f"Failed to sync financial data: {e}")
             raise
 
+    def _upload_most_recent_data(
+        self,
+        financial_category: str,
+        table_name: str,
+        looking_back: int = 14,
+        wiki_obj_token: Optional[str] = None
+    ) -> None:
+        """同步最近指定天数的财务数据。
+
+        从当前日期开始回溯指定天数（默认14天），逐日获取数据并上传飞书。
+
+        Args:
+            financial_category (str): 财务数据类别。
+            table_name (str): 飞书目标数据表名称。
+            looking_back (int): 回溯天数，默认为14天。
+            wiki_obj_token (Optional[str]): 飞书wiki对象令牌，如果为None则自动获取。
+
+        Raises:
+            ValueError: 当输入参数无效时抛出。
+            Exception: 任意步骤失败时抛出。
+        
+        """
+        if not financial_category.strip():
+            raise ValueError("Financial category cannot be empty")
+        if not table_name.strip():
+            raise ValueError("Table name cannot be empty")
+        if looking_back <= 0:
+            raise ValueError("Looking back days must be positive")
+
+        logger.info(f"""Uploading most recent {looking_back}
+                    days for category '{financial_category}'""")
+
+        try:
+            if wiki_obj_token is None:
+                wiki_obj_token = self.lark_client.get_wiki_obj_token(
+                    self.config.get("WIKI_APP_TOKEN")
+                )
+
+            current_time = datetime.now()
+            start_date = current_time - timedelta(days=looking_back)
+
+            queries = FinancialQueries(
+                financial_category,
+                "day", 
+                start_date.strftime("%Y-%m-%d")
+            )
+
+            # Add remaining days (note: corrected the range logic)
+            for i in range(looking_back - 1, 0, -1):
+                current_date = (current_time - timedelta(days=i)).strftime("%Y-%m-%d")
+                queries.add_new_query('day', current_date)
+
+            self.upload_data(queries, table_name, wiki_obj_token)
+
+        except Exception as e:
+            logger.error(f"Failed to upload most recent data: {e}")
+            raise
     
     def _upload_current_year_data_not_by_quarter(
             self,
@@ -224,15 +281,17 @@ class DataSyncClient:
             current_year = current_time.year
             current_month = current_time.month
             current_quarter = (current_month - 1) // 3 + 1
+            current_quarter_idx = current_quarter - 1
                 
             for quarter in range(1, current_quarter):
-                months_in_quarter = QUARTERS[quarter - 1]
+                quarter_idx = quarter - 1
+                months_in_quarter = QUARTERS[quarter_idx]
                 query = FinancialQueries(financial_category)
                 for month in months_in_quarter:
                     query.add_new_query('month', f'{current_year}-{month:02d}')
                 self.upload_data(query, f'{table_name} Q{quarter} {current_year}')
             
-            months_in_quarter = QUARTERS[current_quarter]
+            months_in_quarter = QUARTERS[current_quarter_idx]
             query = FinancialQueries(financial_category)
             for month in range(months_in_quarter[0], current_month):
                 query.add_new_query('month', f'{current_year}-{month:02d}')
