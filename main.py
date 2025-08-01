@@ -66,15 +66,6 @@ if __name__ == "__main__":
         )
         scheduler.start()
     except Exception as e:
-        s = DataSyncClient(".env", "config.json")
-
-
-        ct = datetime.now()
-        t = ct.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
-        m = json.dumps({
-            "text": ('<at user_id="all"></at> ' f'{t}' f' <b>FATAL ERROR</b>')
-        })
-        s.lark_client.send_message_to_chat_group(m, s.config.get("CHAT_ID"))
         os._exit(1)
         
 
