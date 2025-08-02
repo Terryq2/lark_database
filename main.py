@@ -35,7 +35,7 @@ def _message_after_job():
 
     syncer.lark_client.send_message_to_chat_group(
         message,
-        syncer.config.get("CHAT_ID")
+        syncer.lark_client.get_chat_group_id_by_name('服务器状态')
     )
 
 def _message_chat():
@@ -49,7 +49,7 @@ def _message_chat():
 
     syncer.lark_client.send_message_to_chat_group(
         message,
-        syncer.config.get("CHAT_ID")
+        syncer.lark_client.get_chat_group_id_by_name('服务器状态')
     )
 
 
@@ -66,18 +66,6 @@ if __name__ == "__main__":
         )
         scheduler.start()
     except Exception as e:
-        syncer = DataSyncClient(".env", "config.json")
-        current_time = datetime.now()
-        timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
-
-        message = json.dumps({
-            "text": (f'{timestamp}' f' <b>FATAL ERROR</b>')
-        })
-
-        syncer.lark_client.send_message_to_chat_group(
-                message,
-                syncer.config.get("CHAT_ID")
-        )
         os._exit(1)
         
 

@@ -44,7 +44,6 @@ class Config:
     FEISHU_APP_KEY: str
     FEISHU_APP_SECRET: str
     WIKI_APP_TOKEN: str
-    CHAT_ID: str
 
 
 class ConfigManager:
@@ -78,7 +77,7 @@ class ConfigManager:
         keys = dotenv.dotenv_values(env_file)
         required_keys = [
             "APP_KEY", "SECRET_KEY", "LEASE_CODE", "CINEMA_LINK_ID",
-            "CHANNEL_CODE", "FEISHU_APP_KEY", "FEISHU_APP_SECRET", "WIKI_APP_TOKEN", "CHAT_ID"
+            "CHANNEL_CODE", "FEISHU_APP_KEY", "FEISHU_APP_SECRET", "WIKI_APP_TOKEN"
         ]
 
         missing_keys = [key for key in required_keys if key not in keys]
@@ -95,7 +94,6 @@ class ConfigManager:
             FEISHU_APP_KEY=keys["FEISHU_APP_KEY"], # type: ignore
             FEISHU_APP_SECRET=keys["FEISHU_APP_SECRET"], # type: ignore
             WIKI_APP_TOKEN=keys["WIKI_APP_TOKEN"], # type: ignore
-            CHAT_ID= keys["CHAT_ID"] # type: ignore
         )
 
     def get(self, key: str) -> str:

@@ -16,7 +16,7 @@ from . import FINANCIAL_DATA_TYPE_MAP
 from . import exceptions
 from . import sha1prng
 
-
+DEBUG = False
 
 def download_urls(encrypted_urls: list[str],
                   financial_category: str,
@@ -429,6 +429,7 @@ def make_request(
             params=params,
             timeout=timeout
         )
-        # print(response.content)
+        if DEBUG:
+            print(response.content)
         response.raise_for_status()
     return response

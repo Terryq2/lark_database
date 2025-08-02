@@ -363,6 +363,13 @@ class FeishuClient:
             raise
 
         return result
+    
+    def get_chat_group_id_by_name(self,
+                                  name: str):
+        json = self._get_all_chat_groups()
+        for group in json['data']['items']:
+            if group['name'] == name:
+                return group['chat_id']
 
     def _get_all_chat_groups(self):
         """获取租户下所有的群组列表。
