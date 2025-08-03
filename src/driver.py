@@ -419,6 +419,7 @@ class DataSyncClient:
         current_quarter = (current_time.month - 1) // 3 + 1
 
         self.upload_data(FinancialQueries('C02', 'day', yesterday), self.config.get_name('C02'))
+        self.upload_data(FinancialQueries('C03', 'day', yesterday), self.config.get_name('C03'))
         self.upload_data(FinancialQueries('C04', 'day', yesterday), self.config.get_name('C04'))
         self.upload_data(FinancialQueries('C05', 'day', yesterday), self.config.get_name('C05'))
         self.upload_data(FinancialQueries('C07', 'day', yesterday), f'{self.config.get_name('C07')} Q{current_quarter} {current_year}')

@@ -7,6 +7,7 @@ import os
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from src.driver import DataSyncClient
+from src.config import FinancialQueries
 
 def job():
     _job_for_cinema_tickets()
