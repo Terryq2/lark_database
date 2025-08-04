@@ -60,3 +60,5 @@ secrets.json
 *.zip
 *.tar.gz
 *.h5
+
+test.py

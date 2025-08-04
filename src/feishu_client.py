@@ -570,10 +570,11 @@ class FeishuClient:
             logger.error(f"Failed to fetch table '{table_name}': {e}")
             raise
 
-    def get_table_records_id_at_date(self,
+    def get_table_records_id_at_dates(self,
                                     table_name: str,
-                                    day: str,
-                                    time_stamp_column_name: str | None= None,
+                                    days: list[str],
+                                    accuracy: str,
+                                    time_stamp_column_name: str,
                                     wiki_obj_token: str | None = None) -> list[str]:
         """
         获取指定日期（精确到日）对应的记录ID。
@@ -592,7 +593,7 @@ class FeishuClient:
         try:
             _, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
 
-            target_date = datetime.strptime(day, "%Y-%m-%d").date()
+            target_date = [datetime.strptime(day, "%Y-%m-%d").date() for day in days]
             list_of_id = []
             already_read = 0
 
@@ -602,17 +603,17 @@ class FeishuClient:
 
             while already_read < total_records:
                 for field in response['data']['items']:
+
+                    if accuracy == 'day':
+                        time_format = "%Y-%m-%d"
+                    else:
+                        time_format = "%Y-%m-%d %H:%M:%S"
+
                     dt_obj = datetime.strptime(field["fields"][time_stamp_column_name][0]['text'],
-                                               "%Y-%m-%d %H:%M:%S")
+                                               time_format)
                     record_date = dt_obj.date()
 
-                    if record_date > target_date:
-                        # Early termination — all subsequent records will be after target_date
-                        logger.info(f"Early termination at {record_date}"
-                                    "no more records for {target_date}")
-                        return list_of_id
-
-                    if record_date == target_date:
+                    if record_date in target_date:
                         list_of_id.append(field['record_id'])
 
                 already_read += len(response['data']['items'])

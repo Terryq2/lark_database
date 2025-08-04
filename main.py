@@ -23,6 +23,7 @@ def _job_for_cinema_tickets():
 def _job_for_others():
     syncer = DataSyncClient(".env", "config.json")
     syncer.sync_all_yesterday()
+    syncer.sync_screening_data()
 
 
 def _message_after_job():

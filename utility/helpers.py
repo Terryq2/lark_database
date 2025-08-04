@@ -277,7 +277,7 @@ def merge_csv_files(file_names: list[str]) -> polars.DataFrame:
         os.remove(filename)
     return polars.concat(dfs, how="vertical")
 
-def order_by_time(path: str, financial_category: str, timestamp_col: int = 0):
+def order_by_time(path: str, accuracy: str, timestamp_col: int = 0, secondary_timestamp_col: int = None):
     """
     读取 CSV 文件，按时间列排序并覆盖原文件。
 
@@ -308,7 +308,7 @@ def order_by_time(path: str, financial_category: str, timestamp_col: int = 0):
     """
 
     df = polars.read_csv(path, truncate_ragged_lines=True, infer_schema=False)
-    if financial_category == 'C07':
+    if accuracy == 'day':
         df = df.with_columns([
             polars.col(df.columns[timestamp_col]).str.strptime(polars.Datetime,
                                                                "%Y-%m-%d", 
@@ -321,9 +321,15 @@ def order_by_time(path: str, financial_category: str, timestamp_col: int = 0):
                                                             strict=False)
         ])
         
-    
-    df = df.sort(df.columns[timestamp_col], descending = False)
-    if financial_category == 'C07':
+    if secondary_timestamp_col is not None:
+        df = df.sort(
+            [df.columns[timestamp_col], df.columns[secondary_timestamp_col]], 
+            descending=[False, False]  # first ascending, second descending
+        )
+    else:
+        df = df.sort(df.columns[timestamp_col], descending = False)
+        
+    if accuracy == 'day':
         df = df.with_columns([
             polars.col(df.columns[timestamp_col]).dt.strftime("%Y-%m-%d")
         ])

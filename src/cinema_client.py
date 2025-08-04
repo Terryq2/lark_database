@@ -215,10 +215,10 @@ class YKYRequester:
             output_csv = combine_data_files(file_name_stack, financial_category, search_date, True)
 
             logger.info("Ordering data by timestamp")
-            timestamp_column = self.config.get_timestamp_column(financial_category)
+            (timestamp_column, secondary_timestamp_column)= self.config.get_timestamp_columns(financial_category)
             if output_csv is None:
                 raise exceptions.DataProcessException("Data file not generated")
-            order_by_time(output_csv, financial_category, timestamp_column)
+            order_by_time(output_csv, self.config.get_accuracy(financial_category), timestamp_column, secondary_timestamp_column)
 
             logger.info(f"Data processing completed successfully: {output_csv}")
             return output_csv

@@ -62,9 +62,9 @@ class DataSyncClient:
             logger.error(f"Failed to initialize DataSyncClient: {e}")
             raise
 
-    def _get_timestamp_column_name(self, financial_category: str):
+    def _get_primary_timestamp_column_name(self, financial_category: str):
         column_names = self.config.get_columns(financial_category)
-        return column_names[self.config.get_timestamp_column(financial_category)]
+        return column_names[self.config.get_timestamp_columns(financial_category)[0]]
 
 
     def download_data(self, queries: FinancialQueries) -> None:
@@ -94,6 +94,22 @@ class DataSyncClient:
         except Exception as e:
             logger.error(f"Failed to download financial data: {e}")
             raise
+
+    def upload_future_data(
+            self,
+            financial_category: str,
+            table_name: str,
+            days_ahead: int = 30,
+            wiki_obj_token: Optional[str] = None,
+            by_quarter: bool = False
+    ):
+        query = FinancialQueries(financial_category)
+        today = date.today()
+        for day_ahead in range(days_ahead):
+            current_day = today + timedelta(days=day_ahead)
+            query.add_new_query('day', datetime.strftime(current_day, "%Y-%m-%d"))
+        self.upload_data(query, table_name, wiki_obj_token = wiki_obj_token, by_quarter = by_quarter)
+        
 
     def upload_data(
         self,
@@ -374,7 +390,7 @@ class DataSyncClient:
                     self.config.get("WIKI_APP_TOKEN")
                 )
 
-            timestamp_column = self._get_timestamp_column_name(financial_category)
+            timestamp_column = self._get_primary_timestamp_column_name(financial_category)
             list_of_ids = self.lark_client.get_table_records_id_at_head_date(table_name,
                                                                         timestamp_column,
                                                                         wiki_obj_token)
@@ -427,3 +443,19 @@ class DataSyncClient:
         self.upload_data(FinancialQueries('C04', 'day', yesterday), self.config.get_name('C04'))
         self.upload_data(FinancialQueries('C05', 'day', yesterday), self.config.get_name('C05'))
         self.upload_data(FinancialQueries('C07', 'day', yesterday), self.config.get_name('C07'), by_quarter=True)
+
+    def sync_screening_data(self):
+        today = date.today()
+        list_of_days = []
+        list_of_ids_to_delete = []
+        for day_ahead in range(30):
+            current_day = today + timedelta(days=day_ahead)
+            list_of_days.append(current_day.strftime("%Y-%m-%d"))
+
+
+        list_of_ids_to_delete.extend(self.lark_client.get_table_records_id_at_dates(self.config.get_name('C18'),
+                                                                                    list_of_days,
+                                                                                    accuracy=self.config.get_accuracy('C18'),
+                                                                                    time_stamp_column_name=self._get_primary_timestamp_column_name('C18')))
+        self.lark_client.delete_records_by_id(self.config.get_name("C18"), list_of_ids_to_delete)
+        self.upload_future_data('C18', self.config.get_name('C18'))

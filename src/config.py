@@ -120,13 +120,16 @@ class ConfigManager:
         """
         return self.schemas[category]["columns"]
     
+    def get_accuracy(self, category: str) -> str:
+        return self.schemas[category]['accuracy']
+
     def get_name(self, category: str) -> str:
         """
         返回财务类型的名字，例如C01 对应 影票销售明细。
         """
         return self.schemas[category]['name']
 
-    def get_timestamp_column(self, category: str) -> int:
+    def get_timestamp_columns(self, category: str) -> int:
         """
         获取指定类别下的时间戳字段索引，默认为 0。
 
@@ -136,7 +139,7 @@ class ConfigManager:
         Returns:
             int: 时间戳列的索引。
         """
-        return self.schemas[category].get("timestamp_column", 0)
+        return (self.schemas[category].get("timestamp_column", None), self.schemas[category].get("secondary_timestamp_column", None))
 
 
 class FinancialQueries:
