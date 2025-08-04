@@ -99,7 +99,8 @@ class DataSyncClient:
         self,
         queries: FinancialQueries,
         table_name: str,
-        wiki_obj_token: Optional[str] = None
+        wiki_obj_token: Optional[str] = None,
+        by_quarter: bool = False
     ) -> None:
         """从Yuekeyun API获取财务数据并上传至飞书。
 
@@ -124,6 +125,11 @@ class DataSyncClient:
             raise ValueError("Table name cannot be empty")
 
         logger.info(f"Starting sync of financial data to table '{table_name}'")
+
+        if by_quarter:
+            current_time = datetime.now()
+            current_quarter = (current_time.month - 1) // 3 + 1
+            table_name = f'{table_name} Q{current_quarter} {current_time.year}' 
 
         try:
             # Get wiki token if not provided
@@ -394,7 +400,9 @@ class DataSyncClient:
         Returns:
             None
         """
+        self._upload_most_recent_data('C01', "影票销售明细")
         self._upload_current_year_data('C02', self.config.get_name('C02'))
+        self._upload_current_year_data('C03', self.config.get_name('C03'))
         self._upload_current_year_data('C04', self.config.get_name('C04'))
         self._upload_current_year_data('C05', self.config.get_name('C05'))
         self._upload_current_year_data('C07', self.config.get_name('C07'), upload_by_quarter=True)
@@ -414,12 +422,8 @@ class DataSyncClient:
         """
         yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-        current_time = datetime.now()
-        current_year = current_time.year
-        current_quarter = (current_time.month - 1) // 3 + 1
-
         self.upload_data(FinancialQueries('C02', 'day', yesterday), self.config.get_name('C02'))
         self.upload_data(FinancialQueries('C03', 'day', yesterday), self.config.get_name('C03'))
         self.upload_data(FinancialQueries('C04', 'day', yesterday), self.config.get_name('C04'))
         self.upload_data(FinancialQueries('C05', 'day', yesterday), self.config.get_name('C05'))
-        self.upload_data(FinancialQueries('C07', 'day', yesterday), f'{self.config.get_name('C07')} Q{current_quarter} {current_year}')
+        self.upload_data(FinancialQueries('C07', 'day', yesterday), self.config.get_name('C07'), by_quarter=True)
