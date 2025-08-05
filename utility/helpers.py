@@ -1,7 +1,7 @@
 """"
 Helper functions
 """
-from datetime import datetime
+from datetime import datetime, date
 import hashlib
 import hmac
 import os
@@ -439,3 +439,6 @@ def make_request(
             print(response.content)
         response.raise_for_status()
     return response
+
+def compose_table_name(name: str):
+    return f'{name} {date.today().year}'

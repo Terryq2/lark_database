@@ -416,12 +416,13 @@ class DataSyncClient:
         Returns:
             None
         """
-        self._upload_most_recent_data('C01', "影票销售明细")
+        self._upload_most_recent_data('C01', self.config.get_name('C01'))
         self._upload_current_year_data('C02', self.config.get_name('C02'))
         self._upload_current_year_data('C03', self.config.get_name('C03'))
         self._upload_current_year_data('C04', self.config.get_name('C04'))
         self._upload_current_year_data('C05', self.config.get_name('C05'))
         self._upload_current_year_data('C07', self.config.get_name('C07'), upload_by_quarter=True)
+        self._upload_current_year_data('C18', self.config.get_name('C18'))
         
     def sync_all_yesterday(self):
         """将特定财务代码的前一天数据进行同步。
