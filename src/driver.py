@@ -15,7 +15,7 @@ from pathlib import Path
 from src.config import FinancialQueries, ConfigManager
 from src.cinema_client import YKYRequester
 from src.feishu_client import FeishuClient
-from utility.helpers import merge_csv_files, FINANCIAL_DATA_TYPE_MAP
+from utility.helpers import merge_csv_files, compose_table_name, FINANCIAL_DATA_TYPE_MAP
 
 QUARTERS = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
 
@@ -417,12 +417,12 @@ class DataSyncClient:
             None
         """
         self._upload_most_recent_data('C01', self.config.get_name('C01'))
-        self._upload_current_year_data('C02', self.config.get_name('C02'))
-        self._upload_current_year_data('C03', self.config.get_name('C03'))
-        self._upload_current_year_data('C04', self.config.get_name('C04'))
-        self._upload_current_year_data('C05', self.config.get_name('C05'))
+        self._upload_current_year_data('C02', compose_table_name(self.config.get_name('C02')))
+        self._upload_current_year_data('C03', compose_table_name(self.config.get_name('C03')))
+        self._upload_current_year_data('C04', compose_table_name(self.config.get_name('C04')))
+        self._upload_current_year_data('C05', compose_table_name(self.config.get_name('C05')))
         self._upload_current_year_data('C07', self.config.get_name('C07'), upload_by_quarter=True)
-        self._upload_current_year_data('C18', self.config.get_name('C18'))
+        self._upload_current_year_data('C18', compose_table_name(self.config.get_name('C18')))
         
     def sync_all_yesterday(self):
         """将特定财务代码的前一天数据进行同步。
@@ -439,10 +439,10 @@ class DataSyncClient:
         """
         yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
-        self.upload_data(FinancialQueries('C02', 'day', yesterday), self.config.get_name('C02'))
-        self.upload_data(FinancialQueries('C03', 'day', yesterday), self.config.get_name('C03'))
-        self.upload_data(FinancialQueries('C04', 'day', yesterday), self.config.get_name('C04'))
-        self.upload_data(FinancialQueries('C05', 'day', yesterday), self.config.get_name('C05'))
+        self.upload_data(FinancialQueries('C02', 'day', yesterday), compose_table_name(self.config.get_name('C02')))
+        self.upload_data(FinancialQueries('C03', 'day', yesterday), compose_table_name(self.config.get_name('C03')))
+        self.upload_data(FinancialQueries('C04', 'day', yesterday), compose_table_name(self.config.get_name('C04')))
+        self.upload_data(FinancialQueries('C05', 'day', yesterday), compose_table_name(self.config.get_name('C05')))
         self.upload_data(FinancialQueries('C07', 'day', yesterday), self.config.get_name('C07'), by_quarter=True)
 
     def sync_screening_data(self):
@@ -454,9 +454,9 @@ class DataSyncClient:
             list_of_days.append(current_day.strftime("%Y-%m-%d"))
 
 
-        list_of_ids_to_delete.extend(self.lark_client.get_table_records_id_at_dates(self.config.get_name('C18'),
+        list_of_ids_to_delete.extend(self.lark_client.get_table_records_id_at_dates(compose_table_name(self.config.get_name('C18')),
                                                                                     list_of_days,
                                                                                     accuracy=self.config.get_accuracy('C18'),
                                                                                     time_stamp_column_name=self._get_primary_timestamp_column_name('C18')))
-        self.lark_client.delete_records_by_id(self.config.get_name("C18"), list_of_ids_to_delete)
-        self.upload_future_data('C18', self.config.get_name('C18'))
+        self.lark_client.delete_records_by_id(compose_table_name(self.config.get_name('C18')), list_of_ids_to_delete)
+        self.upload_future_data('C18', compose_table_name(self.config.get_name('C18')))
