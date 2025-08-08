@@ -443,7 +443,9 @@ class DataSyncClient:
         self.upload_data(FinancialQueries('C03', 'day', yesterday), compose_table_name(self.config.get_name('C03')))
         self.upload_data(FinancialQueries('C04', 'day', yesterday), compose_table_name(self.config.get_name('C04')))
         self.upload_data(FinancialQueries('C05', 'day', yesterday), compose_table_name(self.config.get_name('C05')))
+        self.upload_data(FinancialQueries('C06', 'day', yesterday), self.config.get_name('C06'), by_quarter=True)
         self.upload_data(FinancialQueries('C07', 'day', yesterday), self.config.get_name('C07'), by_quarter=True)
+        
 
     def sync_screening_data(self):
         today = date.today()
