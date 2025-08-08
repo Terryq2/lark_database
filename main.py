@@ -17,9 +17,9 @@ def job(syncer: DataSyncClient):
 
 def _job_for_cinema_tickets_hourly(syncer: DataSyncClient):
     today = date.today().strftime("%Y-%m-%d")
-    table_name = compose_table_name(syncer.config.get_name('C01'))
+    table_name = syncer.config.get_name('C01')
 
-    list_of_ids = syncer.lark_client.get_table_records_id_at_dates(table_name, [today])
+    list_of_ids = syncer.lark_client.get_table_records_id_at_tail_date(table_name, syncer._get_primary_timestamp_column_name('C01'))
     syncer.lark_client.delete_records_by_id(table_name, list_of_ids)
     query_data_today = FinancialQueries('C01', 'day', today)
     syncer.upload_data(query_data_today, table_name)
