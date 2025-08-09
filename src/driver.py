@@ -451,14 +451,18 @@ class DataSyncClient:
         today = date.today()
         list_of_days = []
         list_of_ids_to_delete = []
+
+        list_of_days.append((date.today()- timedelta(days=1)).strftime("%Y-%m-%d"))
         for day_ahead in range(30):
             current_day = today + timedelta(days=day_ahead)
             list_of_days.append(current_day.strftime("%Y-%m-%d"))
+        
 
-
+        timestamp_col_name = self._get_primary_timestamp_column_name('C18')
         list_of_ids_to_delete.extend(self.lark_client.get_table_records_id_at_dates(compose_table_name(self.config.get_name('C18')),
                                                                                     list_of_days,
                                                                                     accuracy=self.config.get_accuracy('C18'),
-                                                                                    time_stamp_column_name=self._get_primary_timestamp_column_name('C18')))
+                                                                                    time_stamp_column_name=timestamp_col_name,
+                                                                                    column_to_reverse_by=timestamp_col_name))
         self.lark_client.delete_records_by_id(compose_table_name(self.config.get_name('C18')), list_of_ids_to_delete)
         self.upload_future_data('C18', compose_table_name(self.config.get_name('C18')))

@@ -80,11 +80,11 @@ if __name__ == "__main__":
         _message_init(global_syncer)
         scheduler = BlockingScheduler()
 
-        scheduler.add_job(job, 'cron', hour=8, minute=0, args=[global_syncer])
+        scheduler.add_job(job, 'cron', hour=8, minute=15, args=[global_syncer])
         scheduler.add_job(
             _job_for_cinema_tickets_hourly,
             'cron',
-            hour='*',
+            hour='0,8-23',
             minute=0,
             args=[global_syncer]
         )

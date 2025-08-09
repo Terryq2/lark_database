@@ -551,6 +551,9 @@ class FeishuClient:
             request_params: Dict[str, Any] = {
                 "page_size": page_size # Use max allowed for efficiency
             }
+
+
+
             if column_to_reverse_by is not None:
                 request_body = {
                     "sort": [
@@ -589,7 +592,8 @@ class FeishuClient:
                                     days: list[str],
                                     accuracy: str,
                                     time_stamp_column_name: str,
-                                    wiki_obj_token: str | None = None) -> list[str]:
+                                    wiki_obj_token: str | None = None,
+                                    column_to_reverse_by: str | None = None) -> list[str]:
         """
         获取指定日期（精确到日）对应的记录ID。
 
