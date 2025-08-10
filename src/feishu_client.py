@@ -653,6 +653,165 @@ class FeishuClient:
             logger.error(f"Failed to fetch table '{table_name}': {e}")
             raise
 
+    def get_table_records_id_before_date(
+        self,
+        table_name: str,
+        target_date: datetime.date,
+        time_stamp_column_name: str | None = None,
+        wiki_obj_token: str | None = None
+    ) -> list[str]:
+        """
+        获取飞书表格中指定日期之前(不包含该日期)的所有记录ID。
+        
+        假设表格记录按时间戳升序排序(最早的在最前)，一旦出现比输入日期大的记录，即可停止遍历。
+
+        Args:
+            table_name (str): 飞书多维表的名称。
+            target_date (datetime.date): 要比较的目标日期。
+            time_stamp_column_name (str, optional): 时间戳列的名称。
+            wiki_obj_token (Optional[str], optional): Wiki 表对象 token。
+
+        Returns:
+            list[str]: 所有记录时间戳小于 target_date 的记录ID列表。
+        """
+        try:
+            _, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+            list_of_id = []
+
+            response = self.get_table_records(table_name, wiki_obj_token=wiki_obj_token)
+            items = response['data']['items']
+
+            # Process first page
+            for field in items:
+                timestamp_field = field['fields'][time_stamp_column_name]
+
+                try:
+                    record_date = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S")
+                except ValueError as ve:
+                    raise ValueError("Formatting is wrong") from ve
+
+                # Stop if record_date is greater than target_date (since list is sorted)
+                if record_date > target_date:
+                    logger.info(f"Encountered date {record_date} > {target_date}, stopping pagination")
+                    return list_of_id
+
+                # Include only dates strictly before target_date
+                if record_date < target_date:
+                    list_of_id.append(field['record_id'])
+
+            # Continue with subsequent pages if needed
+            already_read = len(items)
+            total_records = response['data']['total']
+
+            while already_read < total_records:
+                page_token = response['data']['page_token']
+
+                response = self.get_table_records(
+                    table_name,
+                    page_token=page_token,
+                    wiki_obj_token=wiki_obj_token
+                )
+
+                items = response['data']['items']
+                already_read += len(items)
+
+                for field in items:
+                    timestamp_field = field['fields'][time_stamp_column_name]
+
+                    try:
+                        record_date = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S")
+                    except ValueError as ve:
+                        raise ValueError("Formatting is wrong") from ve
+
+                    if record_date > target_date:
+                        logger.info(f"Encountered date {record_date} > {target_date}, stopping pagination")
+                        return list_of_id
+
+                    if record_date < target_date:
+                        list_of_id.append(field['record_id'])
+
+            logger.info(f"Fetched {len(list_of_id)} record(s) before {target_date}")
+            return list_of_id
+
+        except Exception as e:
+            logger.error(f"Failed to fetch records before {target_date} from '{table_name}': {e}")
+
+
+
+    def get_table_records_id_after_date(
+        self,
+        table_name: str,
+        target_date: datetime.date,
+        time_stamp_column_name: str | None = None,
+        wiki_obj_token: str | None = None
+    ) -> list[str]:
+        """
+        获取飞书表格中指定日期之后(不包含该日期)的所有记录ID。
+        假设表格记录按时间戳降序排序(最新的在最前)，一旦遇到 <= target_date 即停止。
+
+        Args:
+            table_name (str): 飞书多维表的名称。
+            target_date (datetime.date): 目标日期。
+            time_stamp_column_name (str, optional): 时间戳列的名称。
+            wiki_obj_token (Optional[str], optional): Wiki 表对象 token。
+
+        Returns:
+            list[str]: 所有记录时间戳大于 target_date 的记录ID列表。
+        """
+        try:
+            _, wiki_obj_token = self._initialize_request(table_name, wiki_obj_token)
+            list_of_id = []
+
+            response = self.get_table_records(
+                table_name,
+                wiki_obj_token=wiki_obj_token,
+                column_to_reverse_by=time_stamp_column_name  # descending order
+            )
+
+            def process_items(items):
+                for field in items:
+                    timestamp_field = field['fields'][time_stamp_column_name]
+                    try:
+                        record_date = datetime.strptime(timestamp_field[0]['text'], "%Y-%m-%d %H:%M:%S")
+                    except ValueError as ve:
+                        raise ValueError("Formatting is wrong") from ve
+
+                    if record_date < target_date:
+                        return True  # stop pagination
+
+                    list_of_id.append(field['record_id'])
+
+                return False
+
+            # Process first page
+            if process_items(response['data']['items']):
+                return list_of_id
+
+            # Continue pagination
+            already_read = len(response['data']['items'])
+            total_records = response['data']['total']
+
+            while already_read < total_records:
+                page_token = response['data']['page_token']
+                response = self.get_table_records(
+                    table_name,
+                    page_token=page_token,
+                    wiki_obj_token=wiki_obj_token,
+                    column_to_reverse_by=time_stamp_column_name
+                )
+                already_read += len(response['data']['items'])
+
+                if process_items(response['data']['items']):
+                    break
+
+            logger.info(f"Fetched {len(list_of_id)} record(s) after {target_date}")
+            return list_of_id
+
+        except Exception as e:
+            logger.error(f"Failed to fetch records after {target_date} from '{table_name}': {e}")
+            raise
+
+
     def get_table_records_id_at_head_date(
         self,
         table_name: str,
