@@ -10,10 +10,13 @@ from src.driver import DataSyncClient
 from utility.helpers import compose_table_name
 from src.config import FinancialQueries
 
-def job(syncer: DataSyncClient):
+def job_per_day(syncer: DataSyncClient):
     _job_for_others(syncer)
     _job_for_cinema_ticket_day(syncer)
     _message_after_job(syncer)
+
+def job_per_hour(syncer: DataSyncClient):
+    _job_for_cinema_tickets_hourly(syncer)
 
 def _job_for_cinema_tickets_hourly(syncer: DataSyncClient):
     today = date.today().strftime("%Y-%m-%d")
@@ -26,7 +29,7 @@ def _job_for_cinema_tickets_hourly(syncer: DataSyncClient):
     _message_after_tickets_job(syncer)
 
 def _job_for_cinema_ticket_day(syncer: DataSyncClient):
-    table_name = compose_table_name(syncer.config.get_name('C01'))
+    table_name = syncer.config.get_name('C01')
     list_of_ids = syncer.lark_client.get_table_records_id_at_head_date(table_name, syncer._get_primary_timestamp_column_name('C01'))
     syncer.lark_client.delete_records_by_id(table_name, list_of_ids)
 
@@ -80,9 +83,9 @@ if __name__ == "__main__":
         _message_init(global_syncer)
         scheduler = BlockingScheduler()
 
-        scheduler.add_job(job, 'cron', hour=8, minute=15, args=[global_syncer])
+        scheduler.add_job(job_per_day, 'cron', hour=8, minute=15, args=[global_syncer])
         scheduler.add_job(
-            _job_for_cinema_tickets_hourly,
+            job_per_hour,
             'cron',
             hour='0,8-23',
             minute=0,
