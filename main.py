@@ -20,7 +20,7 @@ def job_per_hour(syncer: DataSyncClient):
 
 def _job_for_cinema_tickets_hourly(syncer: DataSyncClient):
     today = date.today().strftime("%Y-%m-%d")
-    dt_5am = datetime.combine(date.today(), time(5, 0, 0))
+    dt_5am = datetime.combine(date.today(), time(6, 0, 0))
     table_name = syncer.config.get_name('C01')
 
     list_of_ids = syncer.lark_client.get_table_records_id_after_date(table_name, dt_5am, syncer._get_primary_timestamp_column_name('C01'))
@@ -30,7 +30,7 @@ def _job_for_cinema_tickets_hourly(syncer: DataSyncClient):
     _message_after_tickets_job(syncer)
 
 def _job_for_cinema_ticket_daily(syncer: DataSyncClient):
-    dt_5am = datetime.combine(date.today() - timedelta(days=14), time(5, 0, 0))
+    dt_5am = datetime.combine(date.today() - timedelta(days=14), time(6, 0, 0))
 
     table_name = syncer.config.get_name('C01')
     list_of_ids = syncer.lark_client.get_table_records_id_before_date(table_name, dt_5am, syncer._get_primary_timestamp_column_name('C01'))

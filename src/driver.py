@@ -449,10 +449,11 @@ class DataSyncClient:
 
     def sync_screening_data(self):
         today = date.today()
+        yesterday = (date.today()- timedelta(days=1)).strftime("%Y-%m-%d")
         list_of_days = []
         list_of_ids_to_delete = []
 
-        list_of_days.append((date.today()- timedelta(days=1)).strftime("%Y-%m-%d"))
+        list_of_days.append(yesterday)
         for day_ahead in range(30):
             current_day = today + timedelta(days=day_ahead)
             list_of_days.append(current_day.strftime("%Y-%m-%d"))
@@ -465,4 +466,5 @@ class DataSyncClient:
                                                                                     time_stamp_column_name=timestamp_col_name,
                                                                                     column_to_reverse_by=timestamp_col_name))
         self.lark_client.delete_records_by_id(compose_table_name(self.config.get_name('C18')), list_of_ids_to_delete)
+        self.upload_data(FinancialQueries('C18', 'day', yesterday), compose_table_name(self.config.get_name('C18')))
         self.upload_future_data('C18', compose_table_name(self.config.get_name('C18')))
