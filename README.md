@@ -20,6 +20,8 @@ At its core is the `DataSyncClient` class, which manages:
 
 The module is designed for **scheduled jobs** and **daily financial data sync tasks**, but can also be run on-demand.
 
+A version of this library is currently hosted on a Aliyun server and syncs data every hour.
+
 ---
 
 ## Features
@@ -154,3 +156,5 @@ client._upload_current_year_data('C07', 'Category 7 Table', upload_by_quarter=Tr
 # Example 5: Sync screening schedule (C18) from yesterday to 30 days ahead
 client.sync_screening_data()
 ```
+
+
